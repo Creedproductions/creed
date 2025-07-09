@@ -9,7 +9,6 @@ const axios = require('axios');
 const youtubeController = require('./controllers/youtubeController');
 const facebookController = require('./controllers/facebookController');
 // Import from your first codebase - updated for version compatibility
-const { alldown, threads } = require('shaon-media-downloader');
 const { ttdl, twitter, igdl } = require('btch-downloader');
 const { facebook } = require('@mrnima/facebook-downloader');
 const fbAlt = require('@xaviabot/fb-downloader');
@@ -2820,7 +2819,6 @@ app.get('/api/threads', async (req, res) => {
     }
 
     try {
-        // First try with shaon-media-downloader
         try {
             const threadsData = await threads(url);
 
@@ -2842,10 +2840,7 @@ app.get('/api/threads', async (req, res) => {
                     mediaType: 'video',
                 });
             }
-        } catch (threadsErr) {
-            console.warn('Threads download with shaon-media-downloader failed:', threadsErr.message);
         }
-
         // Fallback to your implementation
         const threadsData = await processThreadsUrl(url);
 
