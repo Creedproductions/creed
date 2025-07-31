@@ -3579,7 +3579,6 @@ if (isAudioPlatform || isVideoPlatform) {
                         suggestion: 'Try opening the pin in a browser and downloading the image directly'
                     });
                 }
-            }
         }
         // Important: If URL points to a known media platform but not to actual media file,
         // redirect to info endpoint first to get direct media URL
