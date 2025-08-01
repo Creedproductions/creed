@@ -35,6 +35,11 @@
     "yt-dlp-exec": "1.0.0",
     "ytdlp-nodejs": "2.1.0",
     "yauzl": "^2.10.0",
+    "extract-zip": "^2.0.1",
+    "debug": "^4.3.4",
+    "get-stream": "^8.0.1",
+    "@types/yauzl": "^2.0.0",
+    "pend": "^1.2.0",
     "ytdl-core": "4.11.5"
   },
   "engines": {
