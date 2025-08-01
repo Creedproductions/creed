@@ -28,6 +28,7 @@
     "path": "0.12.7",
     "puppeteer-core": "21.3.8",
     "s-ytdl": "1.1.4",
+    "sprintf-js": "^1.1.2",
     "socket.io": "^4.7.4",
     "tinyurl": "1.1.7",
     "youtube-dl-exec": "2.4.6",
