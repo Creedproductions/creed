@@ -34,6 +34,7 @@
     "youtube-dl-exec": "2.4.6",
     "yt-dlp-exec": "1.0.0",
     "ytdlp-nodejs": "2.1.0",
+    "yauzl": "^2.10.0",
     "ytdl-core": "4.11.5"
   },
   "engines": {
