@@ -19,6 +19,7 @@
     "bitly": "7.1.2",
     "btch-downloader": "2.8.1",
     "cors": "2.8.5",
+    "tslib": "^2.6.2",
     "express": "4.21.1",
     "fb-downloader": "1.0.3",
     "fluent-ffmpeg": "2.1.2",
