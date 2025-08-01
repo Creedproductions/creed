@@ -40,6 +40,12 @@
     "get-stream": "^8.0.1",
     "@types/yauzl": "^2.0.0",
     "pend": "^1.2.0",
+    "cliui": "^8.0.1",
+    "yargs": "^17.7.2",
+    "wrap-ansi":  "^7.0.0",
+    "mkdirp":     "^1.0.4",
+    "pify":       "^5.0.0",
+    "fd-slicer":  "^2.0.1",
     "ytdl-core": "4.11.5"
   },
   "engines": {
