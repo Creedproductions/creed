@@ -45,7 +45,6 @@
     "wrap-ansi":  "^7.0.0",
     "mkdirp":     "^1.0.4",
     "pify":       "^5.0.0",
-    "fd-slicer":  "^2.0.1",
     "ytdl-core": "4.11.5"
   },
   "engines": {
