@@ -31,7 +31,7 @@
     "express": "^4.21.1",
     "node-fetch": "^2.7.0",
     "tinyurl": "^1.1.7",
-    "yt-dlp-exec": "^0.2.4",
+    "yt-dlp-exec": "^1.0.2",
     "youtube-dl-exec": "^2.4.6"
   },
   "optionalDependencies": {
