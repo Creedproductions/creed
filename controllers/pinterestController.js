@@ -1,8 +1,16 @@
 // controllers/pinterestController.js
 const axios = require('axios');
-const ytDlp = require('yt-dlp-exec');
 const fs = require('fs');
 const path = require('path');
+
+// Try to import yt-dlp-exec, but handle if it's not available
+let ytDlp = null;
+try {
+    ytDlp = require('yt-dlp-exec');
+    console.log('✅ yt-dlp-exec loaded for Pinterest controller');
+} catch (err) {
+    console.warn('⚠️  yt-dlp-exec not available in Pinterest controller, using direct parsing only');
+}
 
 // Helper function: validate media URL using a HEAD request.
 async function validateMediaUrl(url, expectedType) {
@@ -108,40 +116,44 @@ async function downloadPinterestMedia(url) {
             }
         }
 
-        // 3. Fallback: Use yt-dlp extraction.
-        console.log("Falling back to yt-dlp extraction for Pinterest video");
-        const TEMP_DIR = path.join(__dirname, '../temp');
-        if (!fs.existsSync(TEMP_DIR)) {
-            fs.mkdirSync(TEMP_DIR, { recursive: true });
-        }
-        const uniqueId = Date.now();
-        const tempFilePath = path.join(TEMP_DIR, `pinterest-video-${uniqueId}.mp4`);
-        try {
-            await ytDlp(url, {
-                output: tempFilePath,
-                noCheckCertificates: true,
-                noWarnings: true,
-                verbose: true,
-                addHeader: [
-                    'referer:https://www.pinterest.com',
-                    'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                ]
-            });
-            if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 10000) {
-                console.log(`yt-dlp downloaded file: ${tempFilePath}`);
-                const videoUrl = `/api/stream-file?path=${encodeURIComponent(tempFilePath)}`;
-                return {
-                    imran: {
-                        title,
-                        url: videoUrl,
-                        thumbnail: videoUrl, // Optionally, you could use a separate extracted thumbnail if available.
-                        isVideo: true,
-                        localFilePath: tempFilePath
-                    }
-                };
+        // 3. Fallback: Use yt-dlp extraction (only if available).
+        if (ytDlp) {
+            console.log("Falling back to yt-dlp extraction for Pinterest video");
+            const TEMP_DIR = path.join(__dirname, '../temp');
+            if (!fs.existsSync(TEMP_DIR)) {
+                fs.mkdirSync(TEMP_DIR, { recursive: true });
             }
-        } catch (ytDlpError) {
-            console.error(`yt-dlp video extraction failed: ${ytDlpError.message}`);
+            const uniqueId = Date.now();
+            const tempFilePath = path.join(TEMP_DIR, `pinterest-video-${uniqueId}.mp4`);
+            try {
+                await ytDlp(url, {
+                    output: tempFilePath,
+                    noCheckCertificates: true,
+                    noWarnings: true,
+                    verbose: true,
+                    addHeader: [
+                        'referer:https://www.pinterest.com',
+                        'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                    ]
+                });
+                if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 10000) {
+                    console.log(`yt-dlp downloaded file: ${tempFilePath}`);
+                    const videoUrl = `/api/stream-file?path=${encodeURIComponent(tempFilePath)}`;
+                    return {
+                        imran: {
+                            title,
+                            url: videoUrl,
+                            thumbnail: videoUrl,
+                            isVideo: true,
+                            localFilePath: tempFilePath
+                        }
+                    };
+                }
+            } catch (ytDlpError) {
+                console.error(`yt-dlp video extraction failed: ${ytDlpError.message}`);
+            }
+        } else {
+            console.log("yt-dlp not available, skipping video fallback extraction");
         }
         // ----- End Video Extraction -----
 

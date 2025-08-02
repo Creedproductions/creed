@@ -1,14 +1,12 @@
 {
   "name": "download_server",
   "version": "2.0.0",
-  "description": "Social media download server with enhanced features and 1.2MB fix",
+  "description": "Social media download server with enhanced features and optimized performance",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "check": "node check-dependencies.js",
     "dev": "nodemon server.js",
-    "install-ytdlp": "pip install yt-dlp",
-    "update-ytdlp": "pip install --upgrade yt-dlp",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -17,35 +15,46 @@
     "video",
     "audio",
     "api",
-    "yt-dlp",
     "youtube",
     "instagram",
-    "tiktok"
+    "tiktok",
+    "facebook",
+    "twitter",
+    "threads",
+    "pinterest"
   ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^1.7.7",
+    "axios": "^1.6.0",
     "bitly": "^7.1.2",
     "cors": "^2.8.5",
-    "express": "^4.21.1",
+    "express": "^4.18.2",
     "node-fetch": "^2.7.0",
-    "tinyurl": "^1.1.7",
-    "yt-dlp-exec": "^1.0.2",
-    "youtube-dl-exec": "^2.4.6"
-  },
-  "optionalDependencies": {
+    "isomorphic-fetch": "^3.0.0",
     "@mrnima/facebook-downloader": "^1.0.0",
     "@xaviabot/fb-downloader": "^1.0.14",
     "btch-downloader": "^2.8.4",
-    "fb-downloader": "^1.0.3",
-    "puppeteer-core": "^21.3.8",
     "ytdl-core": "^4.11.5"
+  },
+  "optionalDependencies": {
+    "youtube-dl-exec": "^2.4.6",
+    "yt-dlp-exec": "^1.0.2",
+    "fb-downloader": "^1.0.3",
+    "puppeteer-core": "^21.3.8"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
   },
   "engines": {
-    "node": ">=14.0.0"
-  }
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "your-repo-url"
+  },
+  "bugs": {
+    "url": "your-issues-url"
+  },
+  "homepage": "your-homepage-url"
 }
