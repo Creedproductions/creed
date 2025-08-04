@@ -6,16 +6,16 @@ const http = require('http');
 const https = require('https');
 const axios = require('axios');
 
-// Working controllers
+// controllers
 const { downloadFacebookVideo } = require('./controllers/facebookController');
 const { downloadYouTubeVideo } = require('./controllers/youtubeController');
 
-// Working packages only
+//packages
 const { alldown, threads } = require('herxa-media-downloader');
 const { ttdl, twitter, igdl } = require('btch-downloader');
 const youtubeDl = require('youtube-dl-exec');
 
-// Optional utilities
+//utilities
 const { BitlyClient } = require('bitly');
 const tinyurl = require('tinyurl');
 const config = require('./config');
@@ -27,15 +27,12 @@ process.env.YTDL_NO_UPDATE = '1';
 const app = express();
 const PORT = process.env.PORT || 5000;
 const bitly = new BitlyClient(config.BITLY_ACCESS_TOKEN || 'your_bitly_token');
-// Add this to the top of your server.js file, right after your imports
 
-// Ensure temp directory exists with proper permissions
 const TEMP_DIR = path.join(__dirname, 'temp');
 if (!fs.existsSync(TEMP_DIR)) {
     console.log('Creating temp directory...');
     try {
         fs.mkdirSync(TEMP_DIR, { recursive: true });
-        // Set permissive permissions
         fs.chmodSync(TEMP_DIR, 0o777);
         console.log(`Temp directory created at ${TEMP_DIR}`);
     } catch (error) {
@@ -46,8 +43,6 @@ if (!fs.existsSync(TEMP_DIR)) {
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Increase timeout for external requests
 http.globalAgent.maxSockets = 25;
 https.globalAgent.maxSockets = 25;
 http.globalAgent.keepAlive = true;
@@ -84,7 +79,7 @@ async function processFacebook(url) {
     return await downloadFacebookVideo(url);
 }
 
-// Function to identify platform - UPDATED to include ALL platforms from your Flutter app
+// Function to identify platform
 const identifyPlatform = (url) => {
     console.info("Platform Identification: Determining the platform for the given URL.");
     const lowerUrl = url.toLowerCase();
@@ -123,7 +118,6 @@ const identifyPlatform = (url) => {
     return null;
 };
 
-// Standardize the response for different platforms
 const formatData = async (platform, data) => {
     console.info(`Data Formatting: Formatting data for platform '${platform}'.`);
     const placeholderThumbnail = 'https://via.placeholder.com/300x150';
@@ -175,7 +169,6 @@ const formatData = async (platform, data) => {
         case 'facebook': {
             console.log("Formatting Facebook data...");
 
-            // If data is already in our enhanced format (from downloadFacebookVideo)
             if (data.success && data.data) {
                 return {
                     title: data.data.title || 'Facebook Video',
@@ -186,9 +179,6 @@ const formatData = async (platform, data) => {
                 };
             }
 
-            // Handle multiple possible Facebook data structures from other methods
-
-            // Structure from @mrnima/facebook-downloader
             if (data.result?.links?.HD || data.result?.links?.SD) {
                 return {
                     title: data.title || 'Untitled Video',
@@ -199,7 +189,7 @@ const formatData = async (platform, data) => {
                 };
             }
 
-            // Structure from @xaviabot/fb-downloader
+            // Structure for @xaviabot/fb-downloader
             if (data.hd || data.sd) {
                 return {
                     title: data.title || 'Untitled Video',
@@ -210,7 +200,7 @@ const formatData = async (platform, data) => {
                 };
             }
 
-            // Structure from fb-downloader (array)
+            // Structure for fb-downloader (array)
             if (Array.isArray(data) && data.length > 0 && data[0].url) {
                 return {
                     title: 'Facebook Video',
@@ -221,7 +211,7 @@ const formatData = async (platform, data) => {
                 };
             }
 
-            // Structure from fb-downloader (object with urls array)
+            // Structure for fb-downloader (object with urls array)
             if (data.urls && Array.isArray(data.urls) && data.urls.length > 0) {
                 return {
                     title: data.title || 'Facebook Video',
@@ -243,7 +233,6 @@ const formatData = async (platform, data) => {
         }
         case 'pinterest': {
             console.info("Data Formatting: Pinterest is handled by dedicated endpoint.");
-            // Use a generic format in case this is still called somewhere
             return {
                 title: data.title || 'Pinterest Image',
                 url: data.url || '',
@@ -346,7 +335,6 @@ const downloadLargeFile = async (fileUrl, filename) => {
     }
 };
 // Enhanced generic handler with youtube-dl - ENHANCED for additional platforms
-// Replace your existing processGenericUrlWithYtdl function with this improved version
 async function processGenericUrlWithYtdl(url, platform) {
     console.log(`Processing ${platform} URL with youtube-dl: ${url}`);
 
@@ -358,11 +346,9 @@ async function processGenericUrlWithYtdl(url, platform) {
         }
     } catch (urlError) {
         console.warn(`URL parsing error: ${urlError.message}`);
-        // Continue anyway, as the error might be unrelated to the path
     }
 
     try {
-        // Use much simpler, universally compatible options for youtube-dl
         const ytdlOptions = {
             dumpSingleJson: true,
             noCheckCertificates: true,
@@ -373,7 +359,6 @@ async function processGenericUrlWithYtdl(url, platform) {
             ],
         };
 
-        // Use simpler format string that works on all versions
         if (['spotify', 'soundcloud', 'bandcamp', 'deezer', 'apple_music',
             'amazon_music', 'mixcloud', 'audiomack'].includes(platform)) {
             // For audio platforms
@@ -388,20 +373,16 @@ async function processGenericUrlWithYtdl(url, platform) {
         console.log(`Executing youtube-dl for ${platform} with format: ${ytdlOptions.format}`);
         const info = await youtubeDl(url, ytdlOptions);
 
-        // Now process the results based on platform type
         const isAudioPlatform = ['spotify', 'soundcloud', 'bandcamp', 'deezer', 'apple_music',
             'amazon_music', 'mixcloud', 'audiomack'].includes(platform);
 
-        // Extract the URL based on the platform type
         let mediaUrl = '';
         let quality = 'Standard Quality';
 
         if (isAudioPlatform) {
-            // For audio platforms, get the best audio URL
             if (info.url) {
                 mediaUrl = info.url;
             } else if (info.formats && info.formats.length > 0) {
-                // Try to find audio-focused format
                 const audioFormats = info.formats
                     .filter(f => f.acodec !== 'none')
                     .sort((a, b) => {
@@ -417,16 +398,13 @@ async function processGenericUrlWithYtdl(url, platform) {
                         quality = `${bestFormat.abr}kbps`;
                     }
                 } else if (info.formats.length > 0) {
-                    // If no audio-only formats, use the first available
                     mediaUrl = info.formats[0].url;
                 }
             }
         } else {
-            // For video platforms, get the best video URL
             if (info.url) {
                 mediaUrl = info.url;
             } else if (info.formats && info.formats.length > 0) {
-                // Try to find a good quality video+audio format
                 const videoFormats = info.formats
                     .filter(f => f.vcodec !== 'none' && f.acodec !== 'none')
                     .sort((a, b) => {
@@ -470,7 +448,6 @@ async function processGenericUrlWithYtdl(url, platform) {
     } catch (ytdlError) {
         console.error(`youtube-dl error for ${platform}: ${ytdlError.message}`);
 
-        // Try a different approach for different platforms
         try {
             console.log(`Attempting alternative approach for ${platform}...`);
 
@@ -484,7 +461,6 @@ async function processGenericUrlWithYtdl(url, platform) {
             } else if (platform === 'bandcamp') {
                 return await handleBandcampFallback(url);
             } else {
-                // Generic fallback for other platforms - try with modified options
                 const fallbackOptions = {
                     dumpSingleJson: true,
                     noCheckCertificates: true,
@@ -524,7 +500,6 @@ async function processGenericUrlWithYtdl(url, platform) {
         } catch (fallbackError) {
             console.error(`Fallback method for ${platform} also failed: ${fallbackError.message}`);
 
-            // Last resort: try to at least get metadata
             try {
                 console.log(`Attempting to extract basic metadata for ${platform}...`);
                 const response = await fetch(url, {
@@ -539,24 +514,20 @@ async function processGenericUrlWithYtdl(url, platform) {
 
                 const html = await response.text();
 
-                // Extract basic metadata
                 let title = `${platform.charAt(0).toUpperCase() + platform.slice(1)} Media`;
                 let thumbnail = 'https://via.placeholder.com/300x150';
 
-                // Try to extract title
                 const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i) ||
                     html.match(/<title>([^<]+)<\/title>/i);
                 if (titleMatch && titleMatch[1]) {
                     title = titleMatch[1].trim();
                 }
 
-                // Try to extract thumbnail
                 const thumbnailMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
                 if (thumbnailMatch && thumbnailMatch[1]) {
                     thumbnail = thumbnailMatch[1];
                 }
 
-                // For the last resort, use our download endpoint
                 const downloadUrl = `/api/download?url=${encodeURIComponent(url)}`;
 
                 return {
@@ -615,13 +586,11 @@ async function handleSoundCloudFallback(url) {
             thumbnail = thumbnailMatch[1];
         }
 
-        // Look for SoundCloud API data
         const apiDataMatch = html.match(/window\.__sc_hydration\s*=\s*(\[.*?\]);/s);
         if (apiDataMatch && apiDataMatch[1]) {
             try {
                 const hydrationData = JSON.parse(apiDataMatch[1]);
 
-                // Find the stream info in the hydration data
                 const streamInfo = hydrationData.find(item =>
                     item.hydratable === 'sound' ||
                     (item.data && (item.data.streamUrl || item.data.stream_url ||
@@ -629,7 +598,6 @@ async function handleSoundCloudFallback(url) {
                 );
 
                 if (streamInfo && streamInfo.data) {
-                    // Try to find the stream URL
                     if (streamInfo.data.streamUrl) {
                         streamUrl = streamInfo.data.streamUrl;
                     } else if (streamInfo.data.stream_url) {
@@ -657,7 +625,6 @@ async function handleSoundCloudFallback(url) {
             }
         }
 
-        // If we found a stream URL, use it
         if (streamUrl) {
             console.log(`Found SoundCloud stream URL: ${streamUrl}`);
             return {
@@ -673,7 +640,6 @@ async function handleSoundCloudFallback(url) {
             };
         }
 
-        // No stream URL found, use our download endpoint
         console.log('No direct stream URL found, using download endpoint');
         const downloadUrl = `/api/download?url=${encodeURIComponent(url)}`;
 
@@ -699,7 +665,6 @@ async function handleVimeoFallback(url) {
     console.log('Using Vimeo-specific fallback method');
 
     try {
-        // Fetch the Vimeo page
         const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -729,19 +694,15 @@ async function handleVimeoFallback(url) {
             thumbnail = thumbnailMatch[1];
         }
 
-        // Look for Vimeo config data
         const configMatch = html.match(/var config = ({.*?});/s);
         if (configMatch && configMatch[1]) {
             try {
-                // Replace single quotes with double quotes for JSON parsing
                 let configStr = configMatch[1].replace(/'/g, '"');
                 const config = JSON.parse(configStr);
 
-                // Extract video URL from config
                 if (config.video && config.video.play && config.video.play.progressive) {
                     const progressiveUrls = config.video.play.progressive;
                     if (Array.isArray(progressiveUrls) && progressiveUrls.length > 0) {
-                        // Sort by quality (highest first)
                         progressiveUrls.sort((a, b) =>
                             parseInt(b.height || 0) - parseInt(a.height || 0)
                         );
@@ -757,7 +718,6 @@ async function handleVimeoFallback(url) {
             }
         }
 
-        // If we couldn't find config, try a different approach
         if (!videoUrl) {
             // Look for player_url in metadata
             const playerUrlMatch = html.match(/<meta property="twitter:player" content="([^"]+)"/i);
@@ -765,7 +725,6 @@ async function handleVimeoFallback(url) {
                 console.log('Found Vimeo player URL, using download endpoint');
             }
 
-            // Use our download endpoint as fallback
             const downloadUrl = `/api/download?url=${encodeURIComponent(url)}`;
 
             return {
@@ -803,7 +762,6 @@ async function handleSpotifyFallback(url) {
     console.log('Using Spotify-specific fallback method');
 
     try {
-        // Get metadata from Spotify page
         const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -816,7 +774,6 @@ async function handleSpotifyFallback(url) {
 
         const html = await response.text();
 
-        // Extract basic metadata
         let title = 'Spotify Track';
         let artist = '';
         let thumbnail = 'https://via.placeholder.com/300x150';
@@ -842,7 +799,6 @@ async function handleSpotifyFallback(url) {
             thumbnail = thumbnailMatch[1];
         }
 
-        // For Spotify, we'll use our download endpoint
         const downloadUrl = `/api/download?url=${encodeURIComponent(url)}`;
 
         return {
@@ -867,7 +823,6 @@ async function handleBandcampFallback(url) {
     console.log('Using Bandcamp-specific fallback method');
 
     try {
-        // Get metadata from Bandcamp page
         const response = await fetch(url, {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
@@ -880,7 +835,6 @@ async function handleBandcampFallback(url) {
 
         const html = await response.text();
 
-        // Extract basic metadata
         let title = 'Bandcamp Track';
         let artist = '';
         let thumbnail = 'https://via.placeholder.com/300x150';
@@ -898,11 +852,9 @@ async function handleBandcampFallback(url) {
             thumbnail = thumbnailMatch[1];
         }
 
-        // Look for the track data in the page
         const trackDataMatch = html.match(/data-tralbum="([^"]+)"/);
         if (trackDataMatch && trackDataMatch[1]) {
             try {
-                // Decode HTML entities and parse as JSON
                 const decodedData = trackDataMatch[1]
                     .replace(/&quot;/g, '"')
                     .replace(/&amp;/g, '&')
@@ -928,7 +880,6 @@ async function handleBandcampFallback(url) {
             }
         }
 
-        // Alternative method to find track URL
         if (!trackUrl) {
             const fileMatch = html.match(/{"mp3-128":"([^"]+)"/);
             if (fileMatch && fileMatch[1]) {
@@ -937,7 +888,6 @@ async function handleBandcampFallback(url) {
             }
         }
 
-        // If we found a track URL, use it
         if (trackUrl) {
             return {
                 success: true,
@@ -952,7 +902,6 @@ async function handleBandcampFallback(url) {
             };
         }
 
-        // No track URL found, use our download endpoint
         console.log('No direct track URL found, using download endpoint');
         const downloadUrl = `/api/download?url=${encodeURIComponent(url)}`;
 
@@ -976,18 +925,14 @@ async function handleBandcampFallback(url) {
 async function fetchThreadsPage(url) {
     let browser = null;
     try {
-        // Chrome paths that might exist on Render and other environments
         const possiblePaths = [
-            // Render pre-installed
             '/opt/render/project/.render/chrome/opt/google/chrome/chrome',
-            // Other common locations
             '/usr/bin/chromium-browser',
             '/usr/bin/chromium',
             '/usr/bin/google-chrome',
             '/usr/bin/google-chrome-stable'
         ];
 
-        // Find the first path that exists
         let executablePath = null;
         for (const path of possiblePaths) {
             try {
@@ -997,7 +942,6 @@ async function fetchThreadsPage(url) {
                     break;
                 }
             } catch (e) {
-                // Continue checking other paths
             }
         }
 
@@ -1024,7 +968,6 @@ async function fetchThreadsPage(url) {
             return await response.text();
         }
 
-        // Launch browser with the found path
         browser = await puppeteer.launch({
             headless: true,
             executablePath,
@@ -1045,12 +988,10 @@ async function fetchThreadsPage(url) {
 
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
 
-        // Get the full HTML of the page
         const html = await page.content();
         return html;
     } catch (error) {
         console.error('Puppeteer error:', error.message);
-        // Fallback to basic fetch if puppeteer fails
         try {
             console.log('Falling back to basic fetch after puppeteer error');
             const response = await fetch(url, {
@@ -1077,12 +1018,10 @@ app.get('/', (req, res) => {
     res.send('Social Media Download API is running');
 });
 
-// Enhanced Twitter Handler with direct download approach
 async function processTwitterWithYtdl(url) {
     console.log(`Processing Twitter/X URL with youtube-dl: ${url}`);
 
     try {
-        // First, try to fetch the Twitter page to extract videos directly
         console.log('Fetching Twitter page content...');
         const response = await fetch(url, {
             headers: {
@@ -1105,10 +1044,8 @@ async function processTwitterWithYtdl(url) {
             title = titleMatch[1].replace(' / X', '').replace(' / Twitter', '').trim();
         }
 
-        // First look for video in the page content
         console.log('Looking for video URLs in Twitter page...');
 
-        // Different patterns to find Twitter video URLs
         const videoUrlPatterns = [
             /video_url":"([^"]+)"/,
             /playbackUrl":"([^"]+)"/,
@@ -1141,9 +1078,7 @@ async function processTwitterWithYtdl(url) {
             }
         }
 
-        // If we found a direct video URL, return it
         if (videoUrl) {
-            // Extract thumbnail
             let thumbnail = '';
             const ogImageMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
             if (ogImageMatch && ogImageMatch[1]) {
@@ -1162,7 +1097,6 @@ async function processTwitterWithYtdl(url) {
             };
         }
 
-        // If direct extraction fails, try youtube-dl
         console.log('Direct video extraction failed, trying youtube-dl...');
 
         const info = await youtubeDl(url, {
@@ -1176,7 +1110,6 @@ async function processTwitterWithYtdl(url) {
         });
 
         if (info && info.formats && info.formats.length > 0) {
-            // Find the best video format
             const formats = info.formats.filter(f => f.vcodec !== 'none' && f.acodec !== 'none');
 
             // Sort by quality (resolution)
@@ -1202,13 +1135,11 @@ async function processTwitterWithYtdl(url) {
             };
         }
 
-        // If we get here, we couldn't find a video
         throw new Error('No video found in Twitter content');
 
     } catch (error) {
         console.error('Twitter/X download error:', error);
 
-        // One last attempt - try to download directly to file
         try {
             console.log('Attempting direct file download for Twitter...');
 
@@ -1230,7 +1161,6 @@ async function processTwitterWithYtdl(url) {
             console.log(`Downloading Twitter video to ${tempFilePath}`);
             await youtubeDl(url, ytDlOptions);
 
-            // Check if file was created and has content
             if (fs.existsSync(tempFilePath)) {
                 const stats = fs.statSync(tempFilePath);
                 if (stats.size > 0) {
@@ -1251,7 +1181,7 @@ async function processTwitterWithYtdl(url) {
                         }
                     };
                 } else {
-                    fs.unlinkSync(tempFilePath); // Delete empty file
+                    fs.unlinkSync(tempFilePath);
                 }
             }
 
@@ -1262,9 +1192,7 @@ async function processTwitterWithYtdl(url) {
         }
     }
 }
-// Add this to your server.js file to handle streaming of local files
 
-// File streaming endpoint for downloaded Twitter videos
 app.get('/api/stream-file', (req, res) => {
     const { path: filePath } = req.query;
 
@@ -1272,7 +1200,6 @@ app.get('/api/stream-file', (req, res) => {
         return res.status(400).json({ error: 'File path is required' });
     }
 
-    // Security check to ensure we're only serving files from the temp directory
     if (!filePath.startsWith(TEMP_DIR)) {
         return res.status(403).json({ error: 'Access denied' });
     }
@@ -1339,7 +1266,6 @@ app.post('/api/download-media', async (req, res) => {
             case 'tiktok':
                 data = await ttdl(url);
                 break;
-            // REPLACE the facebook case in your main switch statement (around line 956) with this simple version:
 
             case 'facebook':
                 console.log('Using enhanced Facebook controller...');
@@ -1352,7 +1278,6 @@ app.post('/api/download-media', async (req, res) => {
                 }
                 break;
             case 'twitter':
-                // Using youtube-dl for Twitter/X instead of alldown
                 const twitterResult = await processTwitterWithYtdl(url);
                 return res.status(200).json(twitterResult);
             case 'youtube':
@@ -1365,7 +1290,6 @@ app.post('/api/download-media', async (req, res) => {
                 data = await threads(url);
                 break;
             default:
-                // For all other platforms, use youtube-dl
                 console.info(`Using enhanced generic handler for platform: ${platform}`);
                 const result = await processGenericUrlWithYtdl(url, platform);
                 return res.status(200).json(result);
@@ -1378,7 +1302,6 @@ app.post('/api/download-media', async (req, res) => {
 
         const formattedData = await formatData(platform, data);
 
-        // Shorten URLs for all platforms except Threads
         if (platform !== 'threads') {
             formattedData.url = await shortenUrl(formattedData.url);
             formattedData.thumbnail = await shortenUrl(formattedData.thumbnail);
@@ -1386,12 +1309,10 @@ app.post('/api/download-media', async (req, res) => {
 
         console.info("Download Media: Media successfully downloaded and formatted.");
 
-        // Download the large file if needed
         if (platform === 'youtube' && formattedData.url) {
             await downloadLargeFile(formattedData.url, 'large_video.mp4');
         }
 
-        // 200 OK: Successful response
         res.status(200).json({
             success: true,
             data: formattedData,
@@ -1399,15 +1320,12 @@ app.post('/api/download-media', async (req, res) => {
     } catch (error) {
         console.error(`Download Media: Error occurred - ${error.message}`);
 
-        // Fallback to existing methods from your server.js
         try {
             console.log(`Attempting fallback for ${platform} URL: ${url}`);
 
-            // Use your existing endpoint logic as fallback
             let response;
 
             if (platform === 'pinterest') {
-                // Use our dedicated Pinterest endpoint instead of processPinterestUrl
                 console.log(`Using dedicated Pinterest endpoint for: ${url}`);
                 const pinterestResponse = await fetch(`http://localhost:${PORT}/api/pinterest?url=${encodeURIComponent(url)}`);
                 if (!pinterestResponse.ok) {
@@ -1423,7 +1341,6 @@ app.post('/api/download-media', async (req, res) => {
             } else if (platform === 'twitter') {
                 response = await processTwitterWithYtdl(url);
             } else {
-                // Generic fallback using youtube-dl
                 response = await processGenericUrlWithYtdl(url, platform);
             }
 
@@ -1439,7 +1356,6 @@ app.post('/api/download-media', async (req, res) => {
     }
 });
 
-// Facebook Handler (from your implementation)
 async function processFacebookUrl(url) {
     return await downloadFacebookVideo(url);
 }
@@ -1455,7 +1371,6 @@ async function processThreadsUrl(url) {
         title = titleMatch[1].trim();
     }
 
-    // First try to detect video via Open Graph meta tag
     const ogVideoMatch = html.match(/<meta property="og:video" content="([^"]+)"\/?>/i) ||
         html.match(/<meta property="og:video:url" content="([^"]+)"\/?>/i);
 
@@ -1482,7 +1397,6 @@ async function processThreadsUrl(url) {
         };
     }
 
-    // Otherwise try image meta tag
     const ogImageMatch = html.match(/<meta property="og:image" content="([^"]+)"\/?>/i);
     if (ogImageMatch && ogImageMatch[1]) {
         const imageUrl = ogImageMatch[1];
@@ -1538,9 +1452,6 @@ async function processThreadsUrl(url) {
     throw new Error('No media found in this Threads post');
 }
 
-// YouTube Handler with youtube-dl
-
-// Generic handler with youtube-dl - ENHANCED for additional platforms
 async function processGenericUrlWithYtdl(url, platform) {
     console.log(`Processing ${platform} URL with youtube-dl: ${url}`);
 
@@ -1552,17 +1463,14 @@ async function processGenericUrlWithYtdl(url, platform) {
         });
 
         if (info && info.formats && info.formats.length > 0) {
-            // Select appropriate format based on platform type
             let format;
 
-            // For audio platforms, select an audio-only format if available
             if (['spotify', 'soundcloud', 'bandcamp', 'deezer', 'apple_music',
                 'amazon_music', 'mixcloud', 'audiomack'].includes(platform)) {
                 format = info.formats.find(f =>
                     f.acodec !== 'none' && f.vcodec === 'none'
                 ) || info.formats.find(f => f.acodec !== 'none') || info.formats[0];
             } else {
-                // For video platforms, select a video format with audio
                 format = info.formats.find(f =>
                     f.format_note === '720p' && f.vcodec !== 'none' && f.acodec !== 'none'
                 ) || info.formats.find(f =>
@@ -1578,7 +1486,6 @@ async function processGenericUrlWithYtdl(url, platform) {
                     thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
                     sizes: ['Original Quality'],
                     source: platform,
-                    // Add extra info for audio platforms
                     isAudio: ['spotify', 'soundcloud', 'bandcamp', 'deezer', 'apple_music',
                         'amazon_music', 'mixcloud', 'audiomack'].includes(platform),
                 }
@@ -1598,7 +1505,6 @@ app.get('/api/info', async (req, res) => {
         return res.status(400).json({ error: 'URL is required' });
     }
 
-    // Redirect request to our new implementation
     try {
         const platform = identifyPlatform(url);
         console.log(`Detected platform for ${url}: ${platform}`);
@@ -1607,7 +1513,6 @@ app.get('/api/info', async (req, res) => {
             return res.status(400).json({ error: 'Unsupported platform' });
         }
 
-        // Carefully check if URL is just a homepage without causing errors
         try {
             const uri = new URL(url);
             if ((uri.pathname === '/' || uri.pathname === '') &&
@@ -1623,30 +1528,24 @@ app.get('/api/info', async (req, res) => {
                 });
             }
         } catch (urlError) {
-            // Continue anyway as this error might be unrelated to the path
             console.warn(`URL parsing error: ${urlError.message}`);
         }
 
-        // Special handling for Pinterest
         if (platform === 'pinterest') {
             console.log('Using dedicated Pinterest endpoint');
             try {
-                // Use our dedicated Pinterest endpoint
                 const pinterestResponse = await fetch(`http://localhost:${PORT}/api/pinterest?url=${encodeURIComponent(url)}`);
 
                 if (!pinterestResponse.ok) {
                     throw new Error(`Pinterest endpoint returned status: ${pinterestResponse.status}`);
                 }
 
-                // Our Pinterest endpoint already returns data in the expected format
                 return res.json(await pinterestResponse.json());
             } catch (pinterestError) {
                 console.error('Pinterest endpoint error:', pinterestError);
-                // If Pinterest endpoint fails, continue with the regular flow
             }
         }
 
-        // Call our internal download function (original code continues here)
         const response = await fetch(`http://localhost:${PORT}/api/download-media`, {
             method: 'POST',
             headers: {
@@ -1658,7 +1557,6 @@ app.get('/api/info', async (req, res) => {
         const data = await response.json();
 
         if (data.success) {
-            // Transform response to format expected by Flutter app
             const isAudioPlatform = ['spotify', 'soundcloud', 'bandcamp', 'deezer', 'apple_music',
                 'amazon_music', 'mixcloud', 'audiomack'].includes(platform);
 
@@ -1693,11 +1591,9 @@ app.get('/api/info', async (req, res) => {
     } catch (error) {
         console.error('API info error:', error);
 
-        // Fall back to youtube-dl for all platforms
         try {
             const platform = identifyPlatform(url);
 
-            // For Pinterest, make one last attempt with our dedicated endpoint
             if (platform === 'pinterest') {
                 try {
                     console.log('Attempting Pinterest endpoint as fallback');
@@ -1707,7 +1603,6 @@ app.get('/api/info', async (req, res) => {
                     }
                 } catch (pinterestFallbackError) {
                     console.warn('Pinterest fallback also failed:', pinterestFallbackError);
-                    // Continue to generic fallback
                 }
             }
 
@@ -1719,14 +1614,12 @@ app.get('/api/info', async (req, res) => {
                 const result = await processGenericUrlWithYtdl(url, platform);
 
                 if (result && result.success && result.data) {
-                    // Format to match expected response format
                     const isImage = result.data.url && (
                         result.data.url.includes('.jpg') ||
                         result.data.url.includes('.jpeg') ||
                         result.data.url.includes('.png')
                     );
 
-                    // Check if this is a download endpoint URL
                     let directUrl = null;
                     if (result.data.useDownloadEndpoint) {
                         directUrl = result.data.url;
@@ -1754,7 +1647,6 @@ app.get('/api/info', async (req, res) => {
                 }
             } catch (handlerError) {
                 console.error(`Improved handler failed for ${platform}: ${handlerError.message}`);
-                // Continue to more generic fallback
             }
 
             // Generic youtube-dl fallback with simplified options
@@ -1813,7 +1705,6 @@ app.get('/api/info', async (req, res) => {
                 });
             }
 
-            // If no formats were found, provide a minimal fallback
             if (formats.length === 0) {
                 formats = [{
                     itag: 'best',
@@ -1861,12 +1752,7 @@ app.get('/api/info', async (req, res) => {
         }
     }
 });
-// Implement platform-specific endpoints to match your Flutter app
 
-// Twitter endpoint
-// Replace the Twitter endpoint with this improved version
-
-// Twitter endpoint with enhanced handling
 app.get('/api/twitter', async (req, res) => {
     const { url } = req.query;
 
@@ -1877,11 +1763,9 @@ app.get('/api/twitter', async (req, res) => {
     try {
         console.log(`Processing Twitter URL: ${url}`);
 
-        // Try with our enhanced Twitter handler
         const twData = await processTwitterWithYtdl(url);
 
         if (twData.success) {
-            // If we have a local file path, use it for direct download
             const hasLocalFile = !!twData.data.localFilePath;
 
             const formattedResponse = {
@@ -1908,7 +1792,6 @@ app.get('/api/twitter', async (req, res) => {
     } catch (error) {
         console.error('Twitter endpoint error:', error);
 
-        // Try one more approach using alldown directly
         try {
             const twData = await alldown(url);
 
@@ -1950,7 +1833,6 @@ app.get('/api/youtube-music', async (req, res) => {
     try {
         const ytData = await youtubeController.downloadYouTubeMusic(url);
 
-        // Format the response to match your existing API format
         const isLocalFile = !!ytData.localFilePath;
 
         return res.json({
@@ -1966,7 +1848,6 @@ app.get('/api/youtube-music', async (req, res) => {
             thumbnails: [{ url: ytData.thumbnail || 'https://via.placeholder.com/300x150' }],
             platform: 'youtube_music',
             mediaType: 'audio',
-            // If we have a local file, we already have the streaming URL
             directUrl: isLocalFile ? ytData.high : `/api/direct?url=${encodeURIComponent(ytData.high)}&referer=youtube.com`,
             source: ytData.source || 'unknown',
             isAudio: true
@@ -1986,10 +1867,8 @@ app.get('/api/pinterest', async (req, res) => {
 
         console.log(`Processing Pinterest URL: ${url}`);
 
-        // User agent for Pinterest requests
         const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36';
 
-        // First, get the actual page to find image data
         const response = await fetch(url, {
             headers: {
                 'User-Agent': userAgent,
@@ -2014,9 +1893,6 @@ app.get('/api/pinterest', async (req, res) => {
             title = titleMatch[1].replace(' | Pinterest', '').trim();
         }
 
-        // ==========================================
-        // NEW CODE: Video detection section
-        // ==========================================
         console.log("Looking for video content first...");
 
         // Multiple patterns to find Pinterest videos
@@ -2047,7 +1923,6 @@ app.get('/api/pinterest', async (req, res) => {
             }
         }
 
-        // If no video URL found with regex, try to look in JSON data chunks
         if (!videoUrl) {
             console.log("No video found with regex patterns, looking in JSON data...");
 
@@ -2059,12 +1934,9 @@ app.get('/api/pinterest', async (req, res) => {
                         const jsonContent = scriptTag.match(/<script[^>]*>([^<]+)<\/script>/)[1];
                         const data = JSON.parse(jsonContent);
 
-                        // Navigate through the JSON data looking for video URLs
-                        // This is a recursive function to search deeply nested objects
                         const findVideoUrls = (obj, path = '') => {
                             if (!obj) return null;
 
-                            // If this is a string that looks like a video URL, return it
                             if (typeof obj === 'string' &&
                                 (obj.includes('v.pinimg.com') ||
                                     obj.includes('.mp4') ||
@@ -2074,9 +1946,7 @@ app.get('/api/pinterest', async (req, res) => {
                                 return obj;
                             }
 
-                            // If it's an object, search its properties
                             if (typeof obj === 'object') {
-                                // First check some common key names
                                 const videoKeys = ['video_url', 'videoUrl', 'mp4Url', 'contentUrl', 'url'];
                                 for (const key of videoKeys) {
                                     if (obj[key] && typeof obj[key] === 'string' &&
@@ -2088,14 +1958,12 @@ app.get('/api/pinterest', async (req, res) => {
                                     }
                                 }
 
-                                // Then recursively search all properties
                                 for (const key in obj) {
                                     const result = findVideoUrls(obj[key], `${path}.${key}`);
                                     if (result) return result;
                                 }
                             }
 
-                            // If it's an array, search its items
                             if (Array.isArray(obj)) {
                                 for (let i = 0; i < obj.length; i++) {
                                     const result = findVideoUrls(obj[i], `${path}[${i}]`);
@@ -2117,17 +1985,14 @@ app.get('/api/pinterest', async (req, res) => {
                         }
                     } catch (jsonError) {
                         console.warn(`Error parsing JSON in script tag: ${jsonError.message}`);
-                        // Continue to next script tag
                     }
                 }
             }
         }
 
-        // If video URL found, validate and prepare response
         if (videoUrl) {
             console.log(`Found Pinterest video URL: ${videoUrl}`);
 
-            // Get thumbnail for the video
             let thumbnail = '';
             const thumbnailPatterns = [
                 /"image_url":"([^"]+)"/i,
@@ -2145,7 +2010,6 @@ app.get('/api/pinterest', async (req, res) => {
                 }
             }
 
-            // Always make a validation call to ensure this is really a video
             try {
                 const videoCheck = await fetch(videoUrl, {
                     method: 'HEAD',
@@ -2159,18 +2023,15 @@ app.get('/api/pinterest', async (req, res) => {
                 console.log(`Video validation check: status=${videoCheck.status}, content-type=${contentType}`);
 
                 if (videoCheck.ok) {
-                    // If content type is not video, but URL ends with .mp4, trust the extension
                     const isVideoContent = contentType && contentType.includes('video');
                     const hasVideoExtension = videoUrl.toLowerCase().includes('.mp4');
 
                     if (!isVideoContent && !hasVideoExtension) {
                         console.warn(`Warning: URL doesn't appear to be a video (${contentType})`);
-                        // Continue anyway - Pinterest sometimes serves videos with incorrect content types
                     }
                 }
             } catch (validationError) {
                 console.warn(`Video validation error: ${validationError.message}`);
-                // Continue anyway, validation is just a precaution
             }
 
             // Return video data
@@ -2196,11 +2057,7 @@ app.get('/api/pinterest', async (req, res) => {
         }
 
         console.log("No video found, looking for images...");
-        // ==========================================
-        // END OF NEW CODE
-        // ==========================================
 
-        // Method 1: Find image URLs directly in the HTML
         let imageUrls = [];
 
         // Look for high-res originals first
@@ -2209,7 +2066,6 @@ app.get('/api/pinterest', async (req, res) => {
             imageUrls = [...new Set(originalImages)]; // Remove duplicates
         }
 
-        // If no originals, look for specific sizes (736x is common for Pinterest)
         if (imageUrls.length === 0) {
             const sizedImages = html.match(/https:\/\/i\.pinimg\.com\/[0-9]+x(?:\/[a-zA-Z0-9\/\._-]+\.(?:jpg|jpeg|png|gif))/gi);
             if (sizedImages && sizedImages.length > 0) {
