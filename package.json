@@ -19,6 +19,8 @@
     "cors": "2.8.5",
     "express": "4.21.1",
     "fb-downloader": "1.0.3",
+    "@mrnima/facebook-downloader": "1.0.0",
+    "@xaviabot/fb-downloader": "1.0.14",
     "fluent-ffmpeg": "2.1.2",
     "herxa-media-downloader": "2.5.0",
     "jsdom": "24.0.0",
