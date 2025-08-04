@@ -13,8 +13,6 @@
   "license": "ISC",
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
-    "@mrnima/facebook-downloader": "1.0.0",
-    "@xaviabot/fb-downloader": "1.0.14",
     "axios": "1.7.7",
     "bitly": "7.1.2",
     "btch-downloader": "2.8.1",
@@ -32,7 +30,11 @@
     "tinyurl": "1.1.7",
     "youtube-dl-exec": "3.0.22",
     "ytdlp-nodejs": "2.1.0",
-    "ytdl-core": "4.11.5"
+    "ytdl-core": "4.11.5",
+    "@distube/ytdl-core": "^4.14.4",
+    "fbvideos": "^1.0.2",
+    "cheerio": "^1.0.0-rc.12",
+    "user-agents": "^1.1.1"
   },
   "engines": {
     "node": ">=14.0.0"

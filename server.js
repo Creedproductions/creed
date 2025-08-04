@@ -6,6 +6,8 @@ const http = require('http');
 const https = require('https');
 const axios = require('axios');
 const ytdl = require('youtube-dl-exec');
+const { downloadFacebookVideo } = require('./controllers/facebookController');
+const { downloadYouTubeVideo } = require('./controllers/youtubeController');
 // Add these lines at the top with your other imports
 const youtubeController = require('./controllers/youtubeController');
 const facebookController = require('./controllers/facebookController');
@@ -77,13 +79,7 @@ const shortenUrl = async (url) => {
     }
 };
 async function processYoutubeWithYtdl(url) {
-    return await ytdl(url, {
-        dumpSingleJson: true,
-        noCheckCertificates: true,
-        noWarnings: true,
-        // ← this line tells yt-dlp to import your Chrome cookies and stay logged in
-        '--cookies-from-browser': 'chrome',
-    });
+    return await downloadYouTubeVideo(url);
 }
 async function processFacebook(url) {
     const res  = await fbDownloader(url);         // { hd, sd, thumbnail, title }
@@ -1433,69 +1429,8 @@ app.post('/api/download-media', async (req, res) => {
 
 // Facebook Handler (from your implementation)
 async function processFacebookUrl(url) {
-    console.log(`Processing Facebook URL: ${url}`);
-
-    try {
-        const result = await fbDownloader(url);
-
-        if (Array.isArray(result) && result.length > 0) {
-            return {
-                success: true,
-                data: {
-                    title: 'Facebook Video',
-                    url: result[0].url,
-                    thumbnail: 'https://via.placeholder.com/300x150',
-                    sizes: ['Original Quality'],
-                    source: 'facebook',
-                }
-            };
-        }
-
-        if (result && result.urls && result.urls.length > 0) {
-            return {
-                success: true,
-                data: {
-                    title: result.title || 'Facebook Video',
-                    url: result.urls[0].url,
-                    thumbnail: result.thumbnail || 'https://via.placeholder.com/300x150',
-                    sizes: ['Original Quality'],
-                    source: 'facebook',
-                }
-            };
-        }
-    } catch (err) {
-        console.warn('fb-downloader failed:', err.message);
-    }
-
-    // Fallback to youtube-dl
-    try {
-        const info = await youtubeDl(url, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-        });
-
-        if (info && info.formats && info.formats.length > 0) {
-            // Find the best format
-            const videoFormat = info.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none') || info.formats[0];
-
-            return {
-                success: true,
-                data: {
-                    title: info.title || 'Facebook Video',
-                    url: videoFormat.url,
-                    thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
-                    sizes: ['Original Quality'],
-                    source: 'facebook',
-                }
-            };
-        }
-    } catch (ytdlError) {
-        console.error('youtube-dl fallback error:', ytdlError);
-        throw ytdlError;
-    }
+    return await downloadFacebookVideo(url);
 }
-
 // Threads Handler
 async function processThreadsUrl(url) {
     console.log(`Processing Threads URL: ${url}`);
@@ -2439,13 +2374,34 @@ app.get('/api/facebook', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'URL is required' });
 
     try {
-        return res.json(await processFacebook(url));
+        const result = await processFacebookUrl(url);
+
+        // Format for your Flutter app
+        const response = {
+            title: result.data.title,
+            formats: [{
+                itag: 'facebook_best',
+                quality: result.data.quality,
+                mimeType: 'video/mp4',
+                url: result.data.url,
+                hasAudio: true,
+                hasVideo: true
+            }],
+            thumbnails: [{ url: result.data.thumbnail }],
+            platform: 'facebook',
+            mediaType: 'video'
+        };
+
+        res.json(response);
     } catch (err) {
         console.error('Facebook endpoint error:', err);
-        res.status(500).json({ error: 'Facebook processing failed', details: err.message });
+        res.status(500).json({
+            error: 'Facebook processing failed',
+            details: err.message,
+            suggestion: 'Make sure the video is public and try again'
+        });
     }
 });
-
 // Threads endpoint
 app.get('/api/threads', async (req, res) => {
     const { url } = req.query;
@@ -2517,13 +2473,34 @@ app.get('/api/youtube', async (req, res) => {
     if (!url) return res.status(400).json({ error: 'URL is required' });
 
     try {
-        return res.json(await processYoutubeWithYtdl(url));
+        const result = await processYoutubeWithYtdl(url);
+
+        // Format for your Flutter app
+        const response = {
+            title: result.data.title,
+            formats: result.data.formats || [{
+                itag: 'youtube_best',
+                quality: result.data.quality,
+                mimeType: 'video/mp4',
+                url: result.data.url,
+                hasAudio: true,
+                hasVideo: true
+            }],
+            thumbnails: [{ url: result.data.thumbnail }],
+            platform: 'youtube',
+            mediaType: 'video'
+        };
+
+        res.json(response);
     } catch (err) {
         console.error('YouTube endpoint error:', err);
-        res.status(500).json({ error: 'YouTube processing failed', details: err.message });
+        res.status(500).json({
+            error: 'YouTube processing failed',
+            details: err.message,
+            suggestion: 'Check if video is available and not private'
+        });
     }
 });
-
 // Audio platforms handler (Spotify, SoundCloud, etc.)
 app.get('/api/audio-platform', async (req, res) => {
     const { url, platform } = req.query;

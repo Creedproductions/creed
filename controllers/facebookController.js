@@ -1,38 +1,89 @@
 // controllers/facebookController.js
-const { facebook } = require('@mrnima/facebook-downloader');
-const fbAlt = require('@xaviabot/fb-downloader');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const fbVideos = require('fbvideos');
+const UserAgent = require('user-agents');
 
 async function downloadFacebookVideo(url) {
   console.log(`Processing Facebook URL: ${url}`);
 
-  // Try primary method first
+  // Method 1: Try fbvideos package first (fastest)
   try {
-    const result = await facebook(url);
-    if (result && result.result && (result.result.links?.HD || result.result.links?.SD)) {
-      console.log("Facebook video successfully downloaded with primary method");
-      return result;
+    console.log('Trying fbvideos package...');
+    const result = await fbVideos.high(url);
+
+    if (result && result.url) {
+      return {
+        success: true,
+        data: {
+          title: 'Facebook Video',
+          url: result.url,
+          thumbnail: 'https://via.placeholder.com/300x150',
+          quality: 'High Quality',
+          source: 'facebook'
+        }
+      };
     }
-    throw new Error("Primary Facebook downloader returned invalid data");
+  } catch (error) {
+    console.warn('fbvideos failed, trying mobile scraping...');
   }
-  catch (primaryError) {
-    console.warn(`Primary Facebook download failed: ${primaryError.message}`);
 
-    // Try secondary method
-    try {
-      console.log("Trying alternative Facebook downloader...");
-      const altResult = await fbAlt(url);
+  // Method 2: Mobile Facebook scraping (lightweight)
+  try {
+    const mobileUrl = url.replace('www.facebook.com', 'm.facebook.com')
+        .replace('facebook.com', 'm.facebook.com');
 
-      if (altResult && (altResult.hd || altResult.sd)) {
-        console.log("Facebook video successfully downloaded with alternative method");
-        return altResult;
+    const userAgent = new UserAgent({ deviceCategory: 'mobile' });
+
+    const response = await axios.get(mobileUrl, {
+      headers: {
+        'User-Agent': userAgent.toString(),
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.5'
+      },
+      timeout: 15000
+    });
+
+    const $ = cheerio.load(response.data);
+    let videoUrl = null;
+    const title = $('title').text() || 'Facebook Video';
+
+    // Look for video in mobile page
+    $('video source').each((i, elem) => {
+      const src = $(elem).attr('src');
+      if (src && src.includes('video')) {
+        videoUrl = src;
+        return false;
       }
-      throw new Error("Alternative downloader returned invalid data");
+    });
+
+    // If no video element, look in page source
+    if (!videoUrl) {
+      const pageSource = response.data;
+      const videoMatch = pageSource.match(/"src":"([^"]*video[^"]*)"/);
+      if (videoMatch) {
+        videoUrl = videoMatch[1].replace(/\\u0026/g, '&').replace(/\\\//g, '/');
+      }
     }
-    catch (altError) {
-      console.error(`Alternative Facebook download also failed: ${altError.message}`);
-      throw new Error(`Failed to download Facebook video: ${altError.message}`);
+
+    if (videoUrl) {
+      return {
+        success: true,
+        data: {
+          title: title,
+          url: videoUrl,
+          thumbnail: 'https://via.placeholder.com/300x150',
+          quality: 'Original Quality',
+          source: 'facebook'
+        }
+      };
     }
+
+  } catch (error) {
+    console.error('Facebook mobile scraping failed:', error.message);
   }
+
+  throw new Error('All Facebook download methods failed');
 }
 
 module.exports = { downloadFacebookVideo };

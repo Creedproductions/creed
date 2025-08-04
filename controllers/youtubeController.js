@@ -1,39 +1,75 @@
 // controllers/youtubeController.js
+const ytdl = require('@distube/ytdl-core');
 
-const axios = require('axios');
-const API_BASE_URL = 'https://savebackend.onrender.com/api';
-// ─────────────────────────────────────────────────────────
-// This is your “good-for-YouTube” server endpoint base.
-// When a request arrives here, we re‐POST it to
-// https://savebackend.onrender.com/api/download and return the result.
-
-exports.download = async (req, res) => {
-  const { url } = req.body;
-  if (!url) {
-    return res.status(400).json({
-      success: false,
-      message: 'Missing `url` in request body'
-    });
-  }
+async function downloadYouTubeVideo(url) {
+  console.log(`Processing YouTube URL: ${url}`);
 
   try {
-    // Forward the same JSON‐body to your “good” download service:
-    const response = await axios.post(`${API_BASE_URL}/download`, { url });
-
-    // If that service returns { success: true, data: { … } }, just pass it through:
-    if (response.data && response.data.success) {
-      return res.json(response.data);
-    } else {
-      return res.status(response.status).json({
-        success: false,
-        message: response.data.message || 'External service failed'
-      });
+    // Validate URL
+    if (!ytdl.validateURL(url)) {
+      throw new Error('Invalid YouTube URL');
     }
-  } catch (err) {
-    console.error('Error calling good‐server:', err.message);
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to fetch from good server'
+
+    // Get video info
+    const info = await ytdl.getInfo(url, {
+      requestOptions: {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+      }
     });
+
+    // Choose best format with both video and audio
+    const format = ytdl.chooseFormat(info.formats, {
+      quality: 'highestvideo',
+      filter: 'audioandvideo'
+    });
+
+    if (!format) {
+      // Fallback to any format with audio
+      const audioFormat = ytdl.chooseFormat(info.formats, {
+        filter: 'audioonly'
+      });
+
+      if (audioFormat) {
+        return {
+          success: true,
+          data: {
+            title: info.videoDetails.title,
+            url: audioFormat.url,
+            thumbnail: info.videoDetails.thumbnails[0]?.url || '',
+            quality: 'Audio Only',
+            source: 'youtube'
+          }
+        };
+      }
+
+      throw new Error('No suitable format found');
+    }
+
+    return {
+      success: true,
+      data: {
+        title: info.videoDetails.title,
+        url: format.url,
+        thumbnail: info.videoDetails.thumbnails[0]?.url || '',
+        quality: format.qualityLabel || 'Best Quality',
+        source: 'youtube',
+        formats: info.formats.map(f => ({
+          itag: f.itag,
+          quality: f.qualityLabel || 'Unknown',
+          url: f.url,
+          mimeType: f.mimeType,
+          hasAudio: f.hasAudio,
+          hasVideo: f.hasVideo
+        }))
+      }
+    };
+
+  } catch (error) {
+    console.error('YouTube download error:', error.message);
+    throw new Error(`YouTube download failed: ${error.message}`);
   }
-};
+}
+
+module.exports = { downloadYouTubeVideo };
