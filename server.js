@@ -10,6 +10,9 @@ const axios = require('axios');
 const { downloadFacebookVideo } = require('./controllers/facebookController');
 const { downloadYouTubeVideo } = require('./controllers/youtubeController');
 
+//utilities
+const { shortenUrl } = require('./utils/urlShortener');
+
 //packages
 const { alldown, threads } = require('herxa-media-downloader');
 const { ttdl, twitter, igdl } = require('btch-downloader');
@@ -48,30 +51,6 @@ https.globalAgent.maxSockets = 25;
 http.globalAgent.keepAlive = true;
 https.globalAgent.keepAlive = true;
 
-// Function to shorten URL with fallback
-const shortenUrl = async (url) => {
-    if (!url) {
-        console.warn("Shorten URL: No URL provided.");
-        return url;
-    }
-
-    try {
-        console.info("Shorten URL: Attempting to shorten with Bitly.");
-        const response = await bitly.shorten(url);
-        console.info("Shorten URL: Successfully shortened with Bitly.");
-        return response.link;
-    } catch (error) {
-        console.warn("Shorten URL: Bitly failed, falling back to TinyURL.");
-        try {
-            const tinyResponse = await tinyurl.shorten(url);
-            console.info("Shorten URL: Successfully shortened with TinyURL.");
-            return tinyResponse;
-        } catch (fallbackError) {
-            console.error("Shorten URL: Both shortening methods failed.");
-            return url;
-        }
-    }
-};
 async function processYoutubeWithYtdl(url) {
     return await downloadYouTubeVideo(url);
 }
