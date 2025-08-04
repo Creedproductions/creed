@@ -5,25 +5,23 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const axios = require('axios');
-const ytdl = require('youtube-dl-exec');
-const { getFbVideoInfo } = require('fb-downloader-scrapper');
+
+// Working controllers
 const { downloadFacebookVideo } = require('./controllers/facebookController');
 const { downloadYouTubeVideo } = require('./controllers/youtubeController');
-// Add these lines at the top with your other imports
-const youtubeController = require('./controllers/youtubeController');
-const facebookController = require('./controllers/facebookController');
-// Import from your first codebase - updated for version compatibility
+
+// Working packages only
 const { alldown, threads } = require('herxa-media-downloader');
 const { ttdl, twitter, igdl } = require('btch-downloader');
-const youtubeDl    = require('youtube-dl-exec');        // NEW / UPDATED
-const fbDownloader = require('@xaviabot/fb-downloader'); // NEW
+const youtubeDl = require('youtube-dl-exec');
 
+// Optional utilities
 const { BitlyClient } = require('bitly');
 const tinyurl = require('tinyurl');
 const config = require('./config');
 const puppeteer = require('puppeteer-core');
+const fetch = require('node-fetch');
 
-const fetch = require('node-fetch'); // Note: changed to commonjs style import for compatibility
 process.env.YTDL_NO_UPDATE = '1';
 // Setup app
 const app = express();
@@ -1341,6 +1339,8 @@ app.post('/api/download-media', async (req, res) => {
             case 'tiktok':
                 data = await ttdl(url);
                 break;
+            // REPLACE the facebook case in your main switch statement (around line 956) with this simple version:
+
             case 'facebook':
                 console.log('Using enhanced Facebook controller...');
                 const fbResult = await processFacebook(url);
