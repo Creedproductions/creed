@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const axios = require('axios');
+const ytdl = require('youtube-dl-exec');
 // Add these lines at the top with your other imports
 const youtubeController = require('./controllers/youtubeController');
 const facebookController = require('./controllers/facebookController');
@@ -76,22 +77,14 @@ const shortenUrl = async (url) => {
     }
 };
 async function processYoutubeWithYtdl(url) {
-    const info = await youtubeDl(url, {
+    return await ytdl(url, {
         dumpSingleJson: true,
-        format: 'bestvideo*+bestaudio/best',
+        noCheckCertificates: true,
         noWarnings: true,
-        noCheckCertificates: true
+        // ← this line tells yt-dlp to import your Chrome cookies and stay logged in
+        '--cookies-from-browser': 'chrome',
     });
-    const fmt = info.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none') || info;
-    return { success: true, data: {
-            title:     info.title ?? 'YouTube Video',
-            url:       fmt.url,
-            thumbnail: info.thumbnail ?? '',
-            sizes:     [fmt.height ? `${fmt.height}p` : 'Best'],
-            source:    'youtube'
-        }};
 }
-
 async function processFacebook(url) {
     const res  = await fbDownloader(url);         // { hd, sd, thumbnail, title }
     const best = res.hd || res.sd;
