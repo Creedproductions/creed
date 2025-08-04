@@ -6,6 +6,7 @@ const http = require('http');
 const https = require('https');
 const axios = require('axios');
 const ytdl = require('youtube-dl-exec');
+const { getFbVideoInfo } = require('fb-downloader-scrapper');
 const { downloadFacebookVideo } = require('./controllers/facebookController');
 const { downloadYouTubeVideo } = require('./controllers/youtubeController');
 // Add these lines at the top with your other imports
@@ -82,15 +83,7 @@ async function processYoutubeWithYtdl(url) {
     return await downloadYouTubeVideo(url);
 }
 async function processFacebook(url) {
-    const res  = await fbDownloader(url);         // { hd, sd, thumbnail, title }
-    const best = res.hd || res.sd;
-    return { success: true, data: {
-            title:     res.title ?? 'Facebook Video',
-            url:       best,
-            thumbnail: res.thumbnail ?? '',
-            sizes:     [res.hd ? 'HD' : 'SD'],
-            source:    'facebook'
-        }};
+    return await downloadFacebookVideo(url);
 }
 
 // Function to identify platform - UPDATED to include ALL platforms from your Flutter app
@@ -182,8 +175,20 @@ const formatData = async (platform, data) => {
         }
 
         case 'facebook': {
-            console.log("Processing Facebook data...");
-            // Handle multiple possible Facebook data structures
+            console.log("Formatting Facebook data...");
+
+            // If data is already in our enhanced format (from downloadFacebookVideo)
+            if (data.success && data.data) {
+                return {
+                    title: data.data.title || 'Facebook Video',
+                    url: data.data.url || '',
+                    thumbnail: data.data.thumbnail || placeholderThumbnail,
+                    sizes: [data.data.quality || 'Original Quality'],
+                    source: platform,
+                };
+            }
+
+            // Handle multiple possible Facebook data structures from other methods
 
             // Structure from @mrnima/facebook-downloader
             if (data.result?.links?.HD || data.result?.links?.SD) {
@@ -1337,7 +1342,14 @@ app.post('/api/download-media', async (req, res) => {
                 data = await ttdl(url);
                 break;
             case 'facebook':
-                data = await facebook(url);
+                console.log('Using enhanced Facebook controller...');
+                const fbResult = await processFacebook(url);
+
+                if (fbResult.success) {
+                    data = fbResult.data;
+                } else {
+                    throw new Error('Facebook processing failed');
+                }
                 break;
             case 'twitter':
                 // Using youtube-dl for Twitter/X instead of alldown

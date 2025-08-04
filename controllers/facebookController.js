@@ -4,10 +4,53 @@ const cheerio = require('cheerio');
 const fbVideos = require('fbvideos');
 const UserAgent = require('user-agents');
 
+// Import the fb-downloader-scrapper package
+const { getFbVideoInfo } = require('fb-downloader-scrapper');
+
 async function downloadFacebookVideo(url) {
   console.log(`Processing Facebook URL: ${url}`);
 
-  // Method 1: Enhanced fbvideos with retry
+  // Method 1: Try fb-downloader-scrapper first
+  try {
+    console.log('Trying fb-downloader-scrapper...');
+
+    const result = await getFbVideoInfo(url);
+
+    if (result && (result.hd || result.sd)) {
+      console.log(`fb-downloader-scrapper success: Found ${result.hd ? 'HD' : 'SD'} quality`);
+
+      // Extract video info
+      const videoUrl = result.hd || result.sd;
+      const title = result.title ?
+          result.title.replace(/&#x([0-9a-f]+);/gi, (match, hex) =>
+              String.fromCharCode(parseInt(hex, 16))
+          ).replace(/&#(\d+);/g, (match, dec) =>
+              String.fromCharCode(dec)
+          ) : 'Facebook Video';
+
+      const thumbnail = result.thumbnail || 'https://via.placeholder.com/300x150';
+      const duration = result.duration_ms ? Math.round(result.duration_ms / 1000) : null;
+
+      console.log(`fb-downloader-scrapper extracted: ${title.substring(0, 50)}...`);
+      console.log(`Video URL: ${videoUrl.substring(0, 100)}...`);
+
+      return {
+        success: true,
+        data: {
+          title: title,
+          url: videoUrl,
+          thumbnail: thumbnail,
+          quality: result.hd ? 'HD Quality' : 'SD Quality',
+          duration: duration,
+          source: 'facebook'
+        }
+      };
+    }
+  } catch (error) {
+    console.warn('fb-downloader-scrapper failed:', error.message);
+  }
+
+  // Method 2: Enhanced fbvideos with retry
   try {
     console.log('Trying fbvideos with multiple attempts...');
 
@@ -36,7 +79,7 @@ async function downloadFacebookVideo(url) {
     console.warn('fbvideos failed:', error.message);
   }
 
-  // Method 2: Enhanced mobile scraping with better patterns
+  // Method 3: Enhanced mobile scraping with better patterns
   try {
     console.log('Trying enhanced mobile scraping...');
 
@@ -185,7 +228,7 @@ async function downloadFacebookVideo(url) {
     console.error('Mobile scraping failed:', error.message);
   }
 
-  // Method 3: Desktop scraping with different approach
+  // Method 4: Desktop scraping with different approach
   try {
     console.log('Trying desktop scraping...');
 

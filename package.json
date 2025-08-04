@@ -21,6 +21,7 @@
     "fb-downloader": "1.0.3",
     "@mrnima/facebook-downloader": "1.0.0",
     "@xaviabot/fb-downloader": "1.0.14",
+    "fb-downloader-scrapper": "^3.0.1",
     "fluent-ffmpeg": "2.1.2",
     "herxa-media-downloader": "2.5.0",
     "jsdom": "24.0.0",
