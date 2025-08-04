@@ -2,76 +2,107 @@
 const ytdl = require('@distube/ytdl-core');
 const youtubeDl = require('youtube-dl-exec');
 
+// Set environment variable to disable update check
+process.env.YTDL_NO_UPDATE = '1';
+
 async function downloadYouTubeVideo(url) {
   console.log(`Processing YouTube URL: ${url}`);
 
   try {
-    // Method 1: Try @distube/ytdl-core first
+    // Method 1: Enhanced @distube/ytdl-core with anti-bot measures
     if (!ytdl.validateURL(url)) {
       throw new Error('Invalid YouTube URL');
     }
 
-    console.log('Getting YouTube info with @distube/ytdl-core...');
+    console.log('Getting YouTube info with enhanced options...');
+
+    // Create agent with cookies to avoid bot detection
+    const agent = ytdl.createAgent([
+      {
+        "domain": ".youtube.com",
+        "expirationDate": 1735689600,
+        "hostOnly": false,
+        "httpOnly": false,
+        "name": "VISITOR_INFO1_LIVE",
+        "path": "/",
+        "sameSite": "no_restriction",
+        "secure": true,
+        "session": false,
+        "value": "fPQ4jCL6EiE"
+      }
+    ]);
+
     const info = await ytdl.getInfo(url, {
+      agent: agent,
       requestOptions: {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Upgrade-Insecure-Requests': '1'
         }
       }
     });
 
     console.log(`Found ${info.formats.length} formats for: ${info.videoDetails.title}`);
 
-    // Smart format selection
+    // Enhanced format selection with proper filtering
     let selectedFormat = null;
 
-    // Try video+audio formats first
-    const videoAudioFormats = info.formats.filter(f =>
-        f.hasAudio && f.hasVideo && f.url
+    // Filter out formats without URLs first
+    const validFormats = info.formats.filter(f => f.url && f.url.length > 0);
+    console.log(`${validFormats.length} formats have valid URLs`);
+
+    // Try video+audio formats (best for mobile)
+    const videoAudioFormats = validFormats.filter(f =>
+        f.hasAudio && f.hasVideo && f.qualityLabel
     );
 
     if (videoAudioFormats.length > 0) {
+      // Sort by quality preference
       videoAudioFormats.sort((a, b) => {
-        const heightA = parseInt(a.qualityLabel) || 0;
-        const heightB = parseInt(b.qualityLabel) || 0;
-        return heightB - heightA;
+        const qualityOrder = {'720p': 3, '480p': 2, '360p': 1};
+        const qualityA = qualityOrder[a.qualityLabel] || 0;
+        const qualityB = qualityOrder[b.qualityLabel] || 0;
+        return qualityB - qualityA;
       });
       selectedFormat = videoAudioFormats[0];
+      console.log(`Selected video+audio format: ${selectedFormat.qualityLabel}`);
     }
 
-    // Fallback to video-only
+    // Fallback to any video format
     if (!selectedFormat) {
-      const videoOnlyFormats = info.formats.filter(f =>
-          f.hasVideo && f.url
-      );
-      if (videoOnlyFormats.length > 0) {
-        selectedFormat = videoOnlyFormats[0];
+      const videoFormats = validFormats.filter(f => f.hasVideo);
+      if (videoFormats.length > 0) {
+        selectedFormat = videoFormats[0];
+        console.log(`Selected video-only format: ${selectedFormat.qualityLabel || 'Unknown'}`);
       }
     }
 
-    // Final fallback to any format
-    if (!selectedFormat) {
-      const anyFormats = info.formats.filter(f => f.url);
-      if (anyFormats.length > 0) {
-        selectedFormat = anyFormats[0];
-      }
+    // Final fallback
+    if (!selectedFormat && validFormats.length > 0) {
+      selectedFormat = validFormats[0];
+      console.log(`Selected fallback format: ${selectedFormat.itag}`);
     }
 
-    if (!selectedFormat || !selectedFormat.url) {
-      throw new Error('No downloadable formats found');
+    if (!selectedFormat) {
+      throw new Error('No valid formats found with URLs');
     }
 
     // Create formats array for Flutter app
-    const availableFormats = info.formats
-        .filter(f => f.url)
-        .slice(0, 10)
+    const availableFormats = validFormats
+        .slice(0, 8)
         .map(format => ({
-          itag: format.itag,
+          itag: format.itag.toString(),
           quality: format.qualityLabel || (format.audioBitrate ? `${format.audioBitrate}kbps` : 'Unknown'),
           url: format.url,
           mimeType: format.mimeType || 'video/mp4',
           hasAudio: format.hasAudio || false,
-          hasVideo: format.hasVideo || false
+          hasVideo: format.hasVideo || false,
+          contentLength: format.contentLength || 0
         }));
 
     return {
@@ -93,34 +124,47 @@ async function downloadYouTubeVideo(url) {
   } catch (error) {
     console.error('@distube/ytdl-core failed:', error.message);
 
-    // Method 2: Fallback to youtube-dl-exec
+    // Method 2: Enhanced youtube-dl-exec with better options
     try {
-      console.log('Trying youtube-dl-exec fallback...');
+      console.log('Trying enhanced youtube-dl-exec...');
 
       const info = await youtubeDl(url, {
         dumpSingleJson: true,
         noCheckCertificates: true,
         noWarnings: true,
-        format: 'best[height<=720]+bestaudio/best',
+        format: 'best[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         addHeader: [
-          'referer:youtube.com',
-          'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-        ]
+          'referer:https://www.youtube.com',
+          'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ],
+        extractor: 'youtube'
       });
 
       if (info && info.formats && info.formats.length > 0) {
-        const bestFormat = info.formats.find(f =>
-            f.vcodec !== 'none' && f.acodec !== 'none'
-        ) || info.formats[0];
+        // Find best format with both video and audio
+        let bestFormat = info.formats.find(f =>
+            f.vcodec !== 'none' && f.acodec !== 'none' && f.url
+        );
 
-        const availableFormats = info.formats.slice(0, 5).map(f => ({
-          itag: f.format_id,
-          quality: f.height ? `${f.height}p` : (f.format_note || 'Unknown'),
-          url: f.url,
-          mimeType: f.ext ? `video/${f.ext}` : 'video/mp4',
-          hasAudio: f.acodec !== 'none',
-          hasVideo: f.vcodec !== 'none'
-        }));
+        if (!bestFormat) {
+          bestFormat = info.formats.find(f => f.url);
+        }
+
+        if (!bestFormat) {
+          throw new Error('No formats with valid URLs found');
+        }
+
+        const availableFormats = info.formats
+            .filter(f => f.url)
+            .slice(0, 5)
+            .map(f => ({
+              itag: f.format_id,
+              quality: f.height ? `${f.height}p` : (f.format_note || 'Unknown'),
+              url: f.url,
+              mimeType: f.ext ? `video/${f.ext}` : 'video/mp4',
+              hasAudio: f.acodec !== 'none',
+              hasVideo: f.vcodec !== 'none'
+            }));
 
         return {
           success: true,
@@ -138,10 +182,51 @@ async function downloadYouTubeVideo(url) {
       }
 
     } catch (fallbackError) {
-      console.error('YouTube fallback also failed:', fallbackError.message);
+      console.error('YouTube fallback failed:', fallbackError.message);
     }
 
-    throw new Error(`YouTube download failed: ${error.message}`);
+    // Method 3: Last resort with different approach
+    try {
+      console.log('Trying last resort method...');
+
+      const simpleInfo = await youtubeDl(url, {
+        dumpSingleJson: true,
+        noCheckCertificates: true,
+        noWarnings: true,
+        format: 'worst[ext=mp4]/worst',
+        addHeader: [
+          'user-agent:Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15'
+        ]
+      });
+
+      if (simpleInfo && simpleInfo.url) {
+        return {
+          success: true,
+          data: {
+            title: simpleInfo.title || 'YouTube Video',
+            url: simpleInfo.url,
+            thumbnail: simpleInfo.thumbnail || 'https://via.placeholder.com/300x150',
+            quality: 'Standard Quality',
+            duration: simpleInfo.duration,
+            author: simpleInfo.uploader || 'Unknown',
+            source: 'youtube',
+            formats: [{
+              itag: 'fallback',
+              quality: 'Standard Quality',
+              url: simpleInfo.url,
+              mimeType: 'video/mp4',
+              hasAudio: true,
+              hasVideo: true
+            }]
+          }
+        };
+      }
+
+    } catch (lastError) {
+      console.error('Last resort also failed:', lastError.message);
+    }
+
+    throw new Error(`All YouTube methods failed. Video may be age-restricted or unavailable.`);
   }
 }
 

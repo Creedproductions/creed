@@ -23,7 +23,7 @@ const config = require('./config');
 const puppeteer = require('puppeteer-core');
 
 const fetch = require('node-fetch'); // Note: changed to commonjs style import for compatibility
-
+process.env.YTDL_NO_UPDATE = '1';
 // Setup app
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -2549,8 +2549,9 @@ app.get('/api/audio-platform', async (req, res) => {
         res.status(500).json({ error: `${platform} processing failed`, details: error.message });
     }
 });
+// Enhanced direct download with better headers and validation - ADD THIS BEFORE YOUR EXISTING ONE
 app.get('/api/direct', async (req, res) => {
-    const { url, filename } = req.query;
+    let { url, filename } = req.query; // Changed from const to let
 
     // Special handling for Pinterest videos
     if (url.includes('v.pinimg.com') || (url.includes('pinimg.com') && url.includes('.mp4'))) {
@@ -2588,12 +2589,16 @@ app.get('/api/direct', async (req, res) => {
             }
 
             const contentType = downloadResp.headers.get('content-type') || 'video/mp4';
-            console.log(`Pinterest video content type: ${contentType}`);
+            const contentLength = downloadResp.headers.get('content-length');
+            console.log(`Pinterest video content type: ${contentType}, length: ${contentLength || 'unknown'}`);
 
             let outputFilename = filename || 'pinterest-video.mp4';
 
             res.setHeader('Content-Type', contentType);
             res.setHeader('Content-Disposition', `attachment; filename="${outputFilename}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
 
             downloadResp.body.pipe(res);
             return; // Exit the function early
@@ -2603,80 +2608,46 @@ app.get('/api/direct', async (req, res) => {
         }
     }
 
-    // Special handling for Facebook Mobile sharing URLs
-    if (url.includes('m.facebook.com/share/v/')) {
-        console.log(`Facebook mobile sharing URL detected: ${url}`);
-        try {
-            // Process the URL with our specialized handler
-            const mobileResult = await processFacebookMobileUrl(url);
-            if (mobileResult && mobileResult.success && mobileResult.data.url) {
-                // Update url variable for further processing
-                const resolvedUrl = mobileResult.data.url;
-                console.log(`Resolved Facebook mobile URL to: ${resolvedUrl}`);
-                // Continue with the resolved URL
-            }
-        } catch (fbMobileError) {
-            console.error(`Error processing Facebook mobile URL: ${fbMobileError.message}`);
-            // Continue with original URL if processing fails
-        }
-    }
-
-    // Always use Facebook-specific headers for any Facebook URLs or fbcdn.net URLs
-    let headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': '*/*',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Referer': new URL(url).origin,
-    };
-
-    // Special handling for Facebook videos (especially those with black screen issues)
+    // Enhanced Facebook handling
     if (url.includes('facebook.com') || url.includes('fb.watch') || url.includes('fb.com') ||
         url.includes('fbcdn.net') || url.includes('video.xx.fbcdn.net')) {
 
-        console.log('Detected Facebook URL, applying specialized handling');
+        console.log('Detected Facebook URL, applying enhanced handling');
 
-        // Check if it's a mobile share URL which needs special processing
+        // Check if it's a non-direct URL that needs resolution
         const isMobileShare = url.includes('m.facebook.com/share/v/') ||
-            (url.includes('fb.watch') && !url.includes('.mp4'));
+            (url.includes('fb.watch') && !url.includes('.mp4')) ||
+            url.includes('/reel/');
 
-        // First try to resolve the URL using our Facebook endpoint
+        // Try to resolve non-direct URLs first
         if (isMobileShare || !url.includes('.mp4')) {
             try {
-                console.log('Not a direct media URL, resolving through Facebook endpoint');
+                console.log('Resolving Facebook URL through endpoint...');
                 const fbResponse = await fetch(`http://localhost:${PORT}/api/facebook?url=${encodeURIComponent(url)}`);
 
                 if (fbResponse.ok) {
                     const fbData = await fbResponse.json();
 
                     if (fbData && fbData.formats && fbData.formats.length > 0) {
-                        // Check for HD version first
-                        const hdFormat = fbData.formats.find(f =>
-                            f.quality && (f.quality.includes('HD') || f.quality.includes('720'))
-                        );
+                        const bestFormat = fbData.formats[0];
+                        console.log(`Resolved Facebook URL: ${bestFormat.url.substring(0, 100)}...`);
 
-                        // Use HD if available, otherwise first format
-                        const bestFormat = hdFormat || fbData.formats[0];
-
-                        // Update the URL to use the direct video URL
-                        console.log(`Using resolved Facebook URL: ${bestFormat.url}`);
-                        // Update url variable
-                        const directUrl = bestFormat.url;
-                        // Continue processing with direct URL
+                        // Use the resolved URL - now this works since url is declared with let
+                        url = bestFormat.url;
                     }
                 }
             } catch (fbResolveError) {
                 console.error(`Error resolving Facebook URL: ${fbResolveError.message}`);
-                // Continue with original URL
             }
         }
 
-        // Facebook requires specific headers
+        // Enhanced Facebook headers
         const fbHeaders = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
-            'Range': 'bytes=0-',  // This helps with some Facebook videos
+            'Range': 'bytes=0-',  // Critical for Facebook videos
             'Referer': 'https://www.facebook.com/',
             'Origin': 'https://www.facebook.com',
             'Sec-Fetch-Dest': 'video',
@@ -2685,12 +2656,125 @@ app.get('/api/direct', async (req, res) => {
             'Connection': 'keep-alive'
         };
 
-        // Sometimes using a mobile user agent helps
+        // Use mobile user agent for mobile URLs
         if (url.includes('m.facebook.com')) {
             fbHeaders['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/14.0 Mobile/15E148 Safari/604.1';
         }
 
-        headers = fbHeaders;
+        try {
+            console.log(`Processing Facebook download: ${url.substring(0, 100)}...`);
+
+            const downloadResp = await fetch(url, {
+                headers: fbHeaders,
+                redirect: 'follow',
+            });
+
+            if (!downloadResp.ok) {
+                throw new Error(`Failed to fetch Facebook content: ${downloadResp.status}`);
+            }
+
+            const contentType = downloadResp.headers.get('content-type') || 'video/mp4';
+            const contentLength = downloadResp.headers.get('content-length');
+
+            console.log(`Facebook content type: ${contentType}, length: ${contentLength || 'unknown'}`);
+
+            // Validate content size
+            const contentLengthNum = parseInt(contentLength || '0');
+            if (contentLengthNum > 0 && contentLengthNum < 1000) {
+                console.warn(`Warning: Facebook content is very small (${contentLengthNum} bytes), might be an error`);
+            }
+
+            let outputFilename = filename || 'facebook-video.mp4';
+            if (!outputFilename.includes('.')) {
+                outputFilename += '.mp4';
+            }
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${outputFilename}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
+
+            downloadResp.body.pipe(res);
+            return;
+
+        } catch (error) {
+            console.error('Facebook download error:', error);
+            return res.status(500).json({
+                error: 'Facebook download failed',
+                details: error.message
+            });
+        }
+    }
+
+    // Enhanced YouTube handling
+    if (url.includes('googlevideo.com') || url.includes('youtube.com') || url.includes('ytimg.com')) {
+        console.log('Detected YouTube URL, applying enhanced handling');
+
+        const ytHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.youtube.com/',
+            'Origin': 'https://www.youtube.com',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'cross-site'
+        };
+
+        try {
+            console.log(`Processing YouTube download: ${url.substring(0, 100)}...`);
+
+            const downloadResp = await fetch(url, {
+                headers: ytHeaders,
+                redirect: 'follow',
+            });
+
+            if (!downloadResp.ok) {
+                throw new Error(`Failed to fetch YouTube content: ${downloadResp.status}`);
+            }
+
+            const contentType = downloadResp.headers.get('content-type') || 'video/mp4';
+            const contentLength = downloadResp.headers.get('content-length');
+
+            console.log(`YouTube content type: ${contentType}, length: ${contentLength || 'unknown'}`);
+
+            let outputFilename = filename || 'youtube-video.mp4';
+            if (!outputFilename.includes('.')) {
+                outputFilename += '.mp4';
+            }
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${outputFilename}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
+
+            downloadResp.body.pipe(res);
+            return;
+
+        } catch (error) {
+            console.error('YouTube download error:', error);
+            return res.status(500).json({
+                error: 'YouTube download failed',
+                details: error.message
+            });
+        }
+    }
+
+    // Generic handling for other platforms (your existing code with enhancements)
+    let headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+
+    // Add referer if we can determine the origin
+    try {
+        const urlObj = new URL(url);
+        headers['Referer'] = urlObj.origin;
+    } catch (e) {
+        // If URL parsing fails, continue without referer
     }
 
     // If we have a specific referer from the query, use it
@@ -2705,7 +2789,7 @@ app.get('/api/direct', async (req, res) => {
     }
 
     try {
-        console.log(`Processing direct download: ${url}`);
+        console.log(`Processing generic download: ${url.substring(0, 100)}...`);
 
         const downloadResp = await fetch(url, {
             headers: headers,
@@ -2717,6 +2801,9 @@ app.get('/api/direct', async (req, res) => {
         }
 
         const contentType = downloadResp.headers.get('content-type') || 'application/octet-stream';
+        const contentLength = downloadResp.headers.get('content-length');
+
+        console.log(`Generic content type: ${contentType}, length: ${contentLength || 'unknown'}`);
 
         let outputFilename = filename || 'download';
         if (!outputFilename.includes('.')) {
@@ -2735,21 +2822,26 @@ app.get('/api/direct', async (req, res) => {
             } else if (url.includes('.png')) {
                 outputFilename += '.png';
             } else {
-                outputFilename += '.bin';
+                outputFilename += '.mp4'; // Default for videos
             }
         }
 
         res.setHeader('Content-Type', contentType);
         res.setHeader('Content-Disposition', `attachment; filename="${outputFilename}"`);
+        if (contentLength) {
+            res.setHeader('Content-Length', contentLength);
+        }
 
         downloadResp.body.pipe(res);
     } catch (error) {
-        console.error('Direct download error:', error);
-        res.status(500).json({ error: 'Direct download failed', details: error.message });
+        console.error('Generic download error:', error);
+        res.status(500).json({
+            error: 'Download failed',
+            details: error.message,
+            url: url.substring(0, 100) + '...'
+        });
     }
-});
-// Download endpoint - FIXED VERSION
-app.get('/api/download', async (req, res) => {
+});app.get('/api/download', async (req, res) => {
     try {
         let { url, itag } = req.query;
 
