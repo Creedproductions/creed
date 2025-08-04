@@ -11,16 +11,14 @@ const facebookController = require('./controllers/facebookController');
 // Import from your first codebase - updated for version compatibility
 const { alldown, threads } = require('herxa-media-downloader');
 const { ttdl, twitter, igdl } = require('btch-downloader');
-const { facebook } = require('@mrnima/facebook-downloader');
-const fbAlt = require('@xaviabot/fb-downloader');
+const youtubeDl    = require('youtube-dl-exec');        // NEW / UPDATED
+const fbDownloader = require('@xaviabot/fb-downloader'); // NEW
+
 const { BitlyClient } = require('bitly');
 const tinyurl = require('tinyurl');
 const config = require('./config');
 const puppeteer = require('puppeteer-core');
 
-// Fallback dependencies to maintain compatibility
-const youtubeDl = require('youtube-dl-exec');
-const fbDownloader = require('fb-downloader');
 const fetch = require('node-fetch'); // Note: changed to commonjs style import for compatibility
 
 // Setup app
@@ -77,6 +75,34 @@ const shortenUrl = async (url) => {
         }
     }
 };
+async function processYoutubeWithYtdl(url) {
+    const info = await youtubeDl(url, {
+        dumpSingleJson: true,
+        format: 'bestvideo*+bestaudio/best',
+        noWarnings: true,
+        noCheckCertificates: true
+    });
+    const fmt = info.formats.find(f => f.vcodec !== 'none' && f.acodec !== 'none') || info;
+    return { success: true, data: {
+            title:     info.title ?? 'YouTube Video',
+            url:       fmt.url,
+            thumbnail: info.thumbnail ?? '',
+            sizes:     [fmt.height ? `${fmt.height}p` : 'Best'],
+            source:    'youtube'
+        }};
+}
+
+async function processFacebook(url) {
+    const res  = await fbDownloader(url);         // { hd, sd, thumbnail, title }
+    const best = res.hd || res.sd;
+    return { success: true, data: {
+            title:     res.title ?? 'Facebook Video',
+            url:       best,
+            thumbnail: res.thumbnail ?? '',
+            sizes:     [res.hd ? 'HD' : 'SD'],
+            source:    'facebook'
+        }};
+}
 
 // Function to identify platform - UPDATED to include ALL platforms from your Flutter app
 const identifyPlatform = (url) => {
@@ -955,317 +981,6 @@ async function handleBandcampFallback(url) {
         throw error;
     }
 }
-// Add this specialized function for handling Facebook mobile URLs
-// Enhanced Facebook mobile video downloader to fix black screen issues
-async function processFacebookMobileUrl(url) {
-    console.log(`Processing Facebook mobile URL: ${url}`);
-
-    // Check if it's a mobile sharing URL
-    const isMobileShare = url.includes('m.facebook.com/share/v/') || url.includes('fb.watch');
-
-    if (isMobileShare) {
-        console.log('Detected Facebook mobile sharing URL, using specialized approach');
-
-        try {
-            // Extract video ID from various URL formats
-            let videoId = null;
-
-            if (url.includes('/share/v/')) {
-                const match = url.match(/\/share\/v\/([^\/\?]+)/);
-                if (match && match[1]) videoId = match[1];
-            } else if (url.includes('fb.watch/')) {
-                const match = url.match(/fb\.watch\/([^\/\?]+)/);
-                if (match && match[1]) videoId = match[1];
-            } else if (url.includes('watch?v=')) {
-                const match = url.match(/watch\?v=([^&]+)/);
-                if (match && match[1]) videoId = match[1];
-            }
-
-            // If we have a video ID, try to create desktop URLs
-            if (videoId) {
-                console.log(`Extracted video ID: ${videoId}`);
-
-                // These are Facebook URL formats that often work better
-                const alternativeUrls = [
-                    `https://www.facebook.com/watch/?v=${videoId}`,
-                    `https://www.facebook.com/watch?v=${videoId}`,
-                    `https://fb.watch/${videoId}`
-                ];
-
-                // Try each alternative URL with our downloaders
-                for (const altUrl of alternativeUrls) {
-                    console.log(`Trying alternative URL: ${altUrl}`);
-
-                    // First try fbDownloader
-                    try {
-                        const result = await fbDownloader(altUrl);
-                        if (Array.isArray(result) && result.length > 0 && result[0].url) {
-                            // Validate the URL actually contains video
-                            const validUrl = await validateVideoUrl(result[0].url);
-                            if (validUrl) {
-                                console.log(`Successfully found valid video URL with fbDownloader: ${validUrl}`);
-                                return {
-                                    success: true,
-                                    data: {
-                                        title: 'Facebook Video',
-                                        url: validUrl,
-                                        thumbnail: result[0].thumbnail || 'https://via.placeholder.com/300x150',
-                                        sizes: result[0].isHD ? ['HD Quality'] : ['Standard Quality'],
-                                        source: 'facebook',
-                                    }
-                                };
-                            }
-                        }
-                    } catch (err) {
-                        console.warn(`fbDownloader failed with ${altUrl}: ${err.message}`);
-                    }
-                }
-            }
-
-            // The above approaches failed, try direct browser emulation approach
-            console.log('Attempting direct browser emulation approach');
-
-            // Common Facebook video patterns
-            const videoUrlPatterns = [
-                /"browser_native_hd_url":"([^"]+)"/,
-                /"browser_native_sd_url":"([^"]+)"/,
-                /"hd_src_no_ratelimit":"([^"]+)"/,
-                /"hd_src":"([^"]+)"/,
-                /"sd_src_no_ratelimit":"([^"]+)"/,
-                /"sd_src":"([^"]+)"/,
-                /"video_url":"([^"]+)"/,
-                /"playable_url_quality_hd":"([^"]+)"/,
-                /"playable_url":"([^"]+)"/
-            ];
-
-            // Attempt to directly fetch the page with a browser-like request
-            const response = await fetch(url, {
-                headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9',
-                    'Referer': 'https://www.facebook.com/',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Cache-Control': 'max-age=0'
-                },
-                redirect: 'follow'
-            });
-
-            if (!response.ok) {
-                throw new Error(`Failed to fetch Facebook page: ${response.status}`);
-            }
-
-            const html = await response.text();
-            console.log(`Fetched HTML content (${html.length} bytes)`);
-
-            // Attempt to find video URLs in the page content
-            const videoUrls = [];
-
-            for (const pattern of videoUrlPatterns) {
-                const matches = [...html.matchAll(pattern)];
-                for (const match of matches) {
-                    if (match && match[1]) {
-                        let videoUrl = match[1]
-                            .replace(/\\u0025/g, '%')
-                            .replace(/\\u002F/g, '/')
-                            .replace(/\\\//g, '/')
-                            .replace(/\\/g, '')
-                            .replace(/&amp;/g, '&');
-
-                        videoUrls.push(videoUrl);
-                        console.log(`Found potential video URL with pattern ${pattern}: ${videoUrl.substr(0, 100)}...`);
-                    }
-                }
-            }
-
-            // Check for direct video tags
-            const videoTagMatches = [...html.matchAll(/<video[^>]+src="([^"]+)"/g)];
-            for (const match of videoTagMatches) {
-                if (match && match[1]) {
-                    videoUrls.push(match[1]);
-                    console.log(`Found video tag source: ${match[1].substr(0, 100)}...`);
-                }
-            }
-
-            // Check for source tags
-            const sourceTagMatches = [...html.matchAll(/<source[^>]+src="([^"]+)"/g)];
-            for (const match of sourceTagMatches) {
-                if (match && match[1]) {
-                    videoUrls.push(match[1]);
-                    console.log(`Found source tag: ${match[1].substr(0, 100)}...`);
-                }
-            }
-
-            // Remove duplicates
-            const uniqueVideoUrls = [...new Set(videoUrls)];
-
-            // Check each URL to see if it's a valid video
-            for (const videoUrl of uniqueVideoUrls) {
-                try {
-                    const validUrl = await validateVideoUrl(videoUrl);
-                    if (validUrl) {
-                        // Extract thumbnail and title if available
-                        let thumbnail = '';
-                        const thumbnailMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-                        if (thumbnailMatch && thumbnailMatch[1]) {
-                            thumbnail = thumbnailMatch[1];
-                        }
-
-                        let title = 'Facebook Video';
-                        const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
-                        if (titleMatch && titleMatch[1]) {
-                            title = titleMatch[1];
-                        }
-
-                        console.log(`Found valid video URL: ${validUrl.substr(0, 100)}...`);
-
-                        return {
-                            success: true,
-                            data: {
-                                title,
-                                url: validUrl,
-                                thumbnail: thumbnail || 'https://via.placeholder.com/300x150',
-                                sizes: videoUrl.includes('hd_src') || videoUrl.includes('hd_url') ? ['HD Quality'] : ['Standard Quality'],
-                                source: 'facebook',
-                            }
-                        };
-                    }
-                } catch (validationError) {
-                    console.warn(`Validation failed for ${videoUrl}: ${validationError.message}`);
-                }
-            }
-
-            // If we got here, we need to try more aggressive methods
-            if (uniqueVideoUrls.length > 0) {
-                // Just return the first URL we found - at least it's a direct link from Facebook
-                // We will handle the download specially in the download handler
-                const bestUrl = uniqueVideoUrls[0];
-
-                // Get any thumbnail and title
-                let thumbnail = '';
-                const thumbnailMatch = html.match(/<meta property="og:image" content="([^"]+)"/i);
-                if (thumbnailMatch && thumbnailMatch[1]) {
-                    thumbnail = thumbnailMatch[1];
-                }
-
-                let title = 'Facebook Video';
-                const titleMatch = html.match(/<meta property="og:title" content="([^"]+)"/i);
-                if (titleMatch && titleMatch[1]) {
-                    title = titleMatch[1];
-                }
-
-                console.log(`Using first available video URL: ${bestUrl.substr(0, 100)}...`);
-
-                return {
-                    success: true,
-                    data: {
-                        title,
-                        url: bestUrl,
-                        thumbnail: thumbnail || 'https://via.placeholder.com/300x150',
-                        sizes: bestUrl.includes('hd_src') || bestUrl.includes('hd_url') ? ['HD Quality'] : ['Standard Quality'],
-                        source: 'facebook',
-                        is_fb_video: true,  // Special flag to handle this differently in download
-                        original_url: url   // Keep the original URL for reference
-                    }
-                };
-            }
-
-            throw new Error('Could not find any video URLs in Facebook content');
-        } catch (error) {
-            console.error(`Facebook video extraction error: ${error.message}`);
-            throw error;
-        }
-    }
-
-    // Not a mobile sharing URL, return null and let the regular handler process it
-    return null;
-}
-
-// Function to validate a video URL is actually a video and not a black screen
-async function validateVideoUrl(url) {
-    console.log(`Validating video URL: ${url}`);
-
-    try {
-        // First, check if it's a video URL by file extension or content type
-        if (url.includes('.mp4') || url.includes('video')) {
-            // Try a HEAD request to check the content type
-            const headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': '*/*',
-                'Accept-Language': 'en-US,en;q=0.5',
-                'Referer': 'https://www.facebook.com/',
-                'Origin': 'https://www.facebook.com/',
-                'Sec-Fetch-Dest': 'video',
-                'Sec-Fetch-Mode': 'cors',
-                'Sec-Fetch-Site': 'cross-site',
-            };
-
-            const response = await fetch(url, {
-                method: 'HEAD',
-                headers,
-                redirect: 'follow'
-            });
-
-            if (response.ok) {
-                const contentType = response.headers.get('content-type');
-                const contentLength = response.headers.get('content-length');
-
-                console.log(`URL validation: status=${response.status}, type=${contentType}, length=${contentLength}`);
-
-                // Check if it's a video content type and has reasonable size
-                if (contentType && contentType.includes('video') && contentLength && parseInt(contentLength) > 50000) {
-                    return url;
-                }
-
-                // Even if not explicitly video type, if it's over 1MB it's likely a valid video
-                if (contentLength && parseInt(contentLength) > 1000000) {
-                    return url;
-                }
-            }
-
-            // If HEAD request failed or didn't confirm video, try a small GET request
-            // to check actual content
-            const rangeHeaders = {
-                ...headers,
-                'Range': 'bytes=0-8192'  // Get just first 8KB to check signature
-            };
-
-            const rangeResponse = await fetch(url, {
-                headers: rangeHeaders,
-                redirect: 'follow'
-            });
-
-            if (rangeResponse.ok || rangeResponse.status === 206) {
-                const buffer = await rangeResponse.arrayBuffer();
-                const bytes = new Uint8Array(buffer);
-
-                // Check for video file signatures
-                // MP4 signature: ftyp (66 74 79 70) after the first 4 bytes
-                // Check for MP4 signature
-                if (bytes.length > 8) {
-                    if (
-                        (bytes[4] === 0x66 && bytes[5] === 0x74 && bytes[6] === 0x79 && bytes[7] === 0x70) || // ftyp
-                        (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x00 && bytes[3] === 0x18) || // h264 common start
-                        (bytes[0] === 0x00 && bytes[1] === 0x00 && bytes[2] === 0x01) // MPEG TS stream
-                    ) {
-                        console.log('URL validation: Found valid video file signature');
-                        return url;
-                    }
-                }
-            }
-        }
-
-        // If we get here, we couldn't definitively validate it as a video
-        // But for Facebook it might still be valid, so return the URL with warning
-        console.warn('URL validation: Could not definitively confirm valid video');
-        return url;
-    } catch (error) {
-        console.error(`URL validation error: ${error.message}`);
-        // Return the URL anyway, as Facebook URLs often fail validation but work
-        return url;
-    }
-}
-// Helper: Puppeteer-based Threads page fetch - with multi-path support and fallbacks
 async function fetchThreadsPage(url) {
     let browser = null;
     try {
@@ -1884,42 +1599,6 @@ async function processThreadsUrl(url) {
 }
 
 // YouTube Handler with youtube-dl
-async function processYoutubeWithYtdl(url) {
-    console.log(`Processing YouTube URL with youtube-dl: ${url}`);
-
-    try {
-        const info = await youtubeDl(url, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-        });
-
-        if (info && info.formats && info.formats.length > 0) {
-            // Find a good quality format
-            const format = info.formats.find(f =>
-                f.format_note === '720p' && f.vcodec !== 'none' && f.acodec !== 'none'
-            ) || info.formats.find(f =>
-                f.vcodec !== 'none' && f.acodec !== 'none'
-            ) || info.formats[0];
-
-            return {
-                success: true,
-                data: {
-                    title: info.title || 'YouTube Video',
-                    url: format.url,
-                    thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
-                    sizes: ['Original Quality'],
-                    source: 'youtube',
-                }
-            };
-        }
-
-        throw new Error('No video formats found');
-    } catch (error) {
-        console.error('YouTube download error:', error);
-        throw error;
-    }
-}
 
 // Generic handler with youtube-dl - ENHANCED for additional platforms
 async function processGenericUrlWithYtdl(url, platform) {
@@ -2761,53 +2440,16 @@ app.get('/api/pinterest', async (req, res) => {
         res.status(500).json({ error: 'Pinterest processing failed', details: error.message });
     }
 });
-// Facebook endpoint
-// Replace your existing Facebook endpoint in main server with this one from your old server
-// Updated Facebook endpoint with mobile URL handling integration
+
 app.get('/api/facebook', async (req, res) => {
     const { url } = req.query;
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required' });
-    }
+    if (!url) return res.status(400).json({ error: 'URL is required' });
 
     try {
-        const fbData = await facebookController.downloadFacebookVideo(url);
-
-        // Format response based on which downloader was successful
-        let videoUrl = '';
-        let title = 'Facebook Video';
-        let thumbnail = 'https://via.placeholder.com/300x150';
-
-        if (fbData.result?.links) {
-            // @mrnima/facebook-downloader format
-            videoUrl = fbData.result.links.HD || fbData.result.links.SD || '';
-            title = fbData.title || title;
-            thumbnail = fbData.result.thumbnail || thumbnail;
-        } else if (fbData.hd || fbData.sd) {
-            // @xaviabot/fb-downloader format
-            videoUrl = fbData.hd || fbData.sd || '';
-            title = fbData.title || title;
-            thumbnail = fbData.thumbnail || thumbnail;
-        }
-
-        return res.json({
-            title: title,
-            formats: [{
-                itag: 'fb_0',
-                quality: 'Original Quality',
-                mimeType: 'video/mp4',
-                url: videoUrl,
-                hasAudio: true,
-                hasVideo: true,
-            }],
-            thumbnails: [{ url: thumbnail }],
-            platform: 'facebook',
-            mediaType: 'video',
-            directUrl: `/api/direct?url=${encodeURIComponent(videoUrl)}&referer=facebook.com`,
-        });
-    } catch (error) {
-        console.error('Facebook endpoint error:', error);
-        res.status(500).json({ error: 'Facebook processing failed', details: error.message });
+        return res.json(await processFacebook(url));
+    } catch (err) {
+        console.error('Facebook endpoint error:', err);
+        res.status(500).json({ error: 'Facebook processing failed', details: err.message });
     }
 });
 
@@ -2879,33 +2521,13 @@ app.get('/api/threads', async (req, res) => {
 
 app.get('/api/youtube', async (req, res) => {
     const { url } = req.query;
-    if (!url) {
-        return res.status(400).json({ error: 'URL is required' });
-    }
+    if (!url) return res.status(400).json({ error: 'URL is required' });
 
     try {
-        const ytData = await youtubeController.downloadYouTubeVideo(url);
-
-        // Format the response specifically for your app
-        return res.json({
-            title: ytData.title || 'YouTube Video',
-            formats: [{
-                itag: 'yt_high',
-                quality: 'High Quality',
-                mimeType: 'video/mp4',
-                url: ytData.high || '',
-                hasAudio: true,
-                hasVideo: true,
-            }],
-            thumbnails: [{ url: ytData.thumbnail || '' }],
-            platform: 'youtube',
-            mediaType: 'video',
-            // Include direct URLs for client to use
-            directUrl: ytData.high
-        });
-    } catch (error) {
-        console.error('YouTube endpoint error:', error);
-        res.status(500).json({ error: 'YouTube processing failed', details: error.message });
+        return res.json(await processYoutubeWithYtdl(url));
+    } catch (err) {
+        console.error('YouTube endpoint error:', err);
+        res.status(500).json({ error: 'YouTube processing failed', details: err.message });
     }
 });
 
