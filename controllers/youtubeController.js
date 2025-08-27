@@ -32,15 +32,16 @@ async function fetchYouTubeData(url) {
     }
 
     return {
-        success: true,
-        data: {
-            title: data.title,
-            url: bestUrl, // Direct URL instead of proxy
-            thumbnail: data.thumbnail || 'https://via.placeholder.com/300x150',
-            quality: selectedFormat.quality || 'Best Available',
-            duration: data.duration,
-            source: 'youtube'
-        }
+      title: data.title,
+      thumbnail: data.cover,
+      duration: data.duration,
+      // Normalize shapes
+      formats: data.items.map((item) => ({
+        type: item.type,                  // 'video' | 'audio' | 'video-only' | 'audio-only'
+        quality: item.label || item.quality || "unknown",
+        ext: item.ext || item.extension || "mp4",
+        url: item.url,
+      })),
     };
   } catch (err) {
     throw new Error(`YouTube downloader request failed: ${err.message}`);
@@ -68,7 +69,9 @@ async function downloadYouTubeVideo(url) {
     if (!selectedFormat) {
       throw new Error('No valid download URL found');
     }
+
     const bestUrl = selectedFormat.url;
+
     // Map ALL returned formats into proxied URLs (NO shortening)
     const formats = data.formats
       .filter(f => f.url)
