@@ -68,7 +68,6 @@ async function downloadYouTubeVideo(url) {
     if (!selectedFormat) {
       throw new Error('No valid download URL found');
     }
-
     const bestUrl = selectedFormat.url;
 
     // Map ALL returned formats into proxied URLs (NO shortening)
