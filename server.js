@@ -1237,42 +1237,66 @@ app.post('/api/download-media', async (req, res) => {
     try {
         console.info(`Download Media: Fetching data for platform '${platform}'.`);
         let data;
-
-        switch (platform) {
-            case 'instagram':
-                data = await igdl(url);
-                break;
-            case 'tiktok':
-                data = await ttdl(url);
-                break;
-
-            case 'facebook':
-                console.log('Using enhanced Facebook controller...');
-                const fbResult = await processFacebook(url);
-
-                if (fbResult.success) {
-                    data = fbResult.data;
-                } else {
-                    throw new Error('Facebook processing failed');
-                }
-                break;
-            case 'twitter':
-                const twitterResult = await processTwitterWithYtdl(url);
-                return res.status(200).json(twitterResult);
-            case 'youtube':
-                data = await alldown(url);
-                break;
-            case 'pinterest':
-                data = await pinterestdl(url);
-                break;
-            case 'threads':
-                data = await threads(url);
-                break;
-            default:
-                console.info(`Using enhanced generic handler for platform: ${platform}`);
-                const result = await processGenericUrlWithYtdl(url, platform);
-                return res.status(200).json(result);
+switch (platform) {
+    case 'instagram':
+        try {
+            console.log('Using enhanced Instagram handler...');
+            const igResult = await processInstagramWithYtdl(url);
+            return res.status(200).json(igResult);
+        } catch (igError) {
+            console.warn('Enhanced Instagram failed, trying original...');
+            data = await igdl(url);
         }
+        break;
+
+    case 'tiktok':
+        data = await ttdl(url);
+        break;
+
+    case 'facebook':
+        try {
+            console.log('Using enhanced Facebook handler...');
+            const fbResult = await processFacebookWithYtdl(url);
+            return res.status(200).json(fbResult);
+        } catch (fbError) {
+            console.warn('Enhanced Facebook failed, trying original...');
+            const fbResult = await processFacebook(url);
+            if (fbResult.success) {
+                data = fbResult.data;
+            } else {
+                throw new Error('Facebook processing failed');
+            }
+        }
+        break;
+
+    case 'twitter':
+        const twitterResult = await processTwitterWithYtdl(url);
+        return res.status(200).json(twitterResult);
+
+    case 'youtube':
+        try {
+            console.log('Using enhanced YouTube handler...');
+            const ytResult = await processYouTubeWithYtdl(url);
+            return res.status(200).json(ytResult);
+        } catch (ytError) {
+            console.warn('Enhanced YouTube failed, trying original...');
+            data = await alldown(url);
+        }
+        break;
+
+    case 'pinterest':
+        data = await pinterestdl(url);
+        break;
+
+    case 'threads':
+        data = await threads(url);
+        break;
+
+    default:
+        console.info(`Using enhanced generic handler for platform: ${platform}`);
+        const result = await processGenericUrlWithYtdl(url, platform);
+        return res.status(200).json(result);
+}
 
         if (!data) {
             console.error("Download Media: No data returned for the platform.");
@@ -1281,10 +1305,10 @@ app.post('/api/download-media', async (req, res) => {
 
         const formattedData = await formatData(platform, data);
 
-        if (platform !== 'threads') {
-            formattedData.url = await shortenUrl(formattedData.url);
-            formattedData.thumbnail = await shortenUrl(formattedData.thumbnail);
-        }
+       if (platform !== 'threads' && platform !== 'instagram' && platform !== 'facebook' && platform !== 'youtube') {
+           formattedData.url = await shortenUrl(formattedData.url);
+           formattedData.thumbnail = await shortenUrl(formattedData.thumbnail);
+       }
 
         console.info("Download Media: Media successfully downloaded and formatted.");
 
@@ -3609,3 +3633,208 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server accessible at http://localhost:${PORT}`);
     console.log(`Temporary directory: ${TEMP_DIR}`);
 });
+async function processInstagramWithYtdl(url) {
+    console.log(`Processing Instagram URL with enhanced method: ${url}`);
+
+    try {
+        const info = await youtubeDl(url, {
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.instagram.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (info && info.url) {
+            return {
+                success: true,
+                data: {
+                    title: info.title || 'Instagram Media',
+                    url: info.url,
+                    thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
+                    sizes: ['Original Quality'],
+                    source: 'instagram',
+                }
+            };
+        }
+
+        const tempId = Date.now();
+        const tempFilePath = path.join(TEMP_DIR, `instagram-${tempId}.mp4`);
+
+        await youtubeDl(url, {
+            output: tempFilePath,
+            format: 'best[ext=mp4]/best',
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.instagram.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
+            const videoUrl = `/api/stream-file?path=${encodeURIComponent(tempFilePath)}`;
+
+            return {
+                success: true,
+                data: {
+                    title: 'Instagram Media',
+                    url: videoUrl,
+                    localFilePath: tempFilePath,
+                    thumbnail: 'https://via.placeholder.com/300x150',
+                    sizes: ['Original Quality'],
+                    source: 'instagram',
+                }
+            };
+        }
+
+        throw new Error('No Instagram media found');
+    } catch (error) {
+        console.error('Instagram enhanced processing failed:', error);
+        throw error;
+    }
+}
+
+async function processFacebookWithYtdl(url) {
+    console.log(`Processing Facebook URL with enhanced method: ${url}`);
+
+    try {
+        const info = await youtubeDl(url, {
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.facebook.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (info && info.formats && info.formats.length > 0) {
+            const videoFormats = info.formats
+                .filter(f => f.vcodec !== 'none' && f.acodec !== 'none')
+                .sort((a, b) => (b.height || 0) - (a.height || 0));
+
+            if (videoFormats.length > 0) {
+                const bestFormat = videoFormats[0];
+                return {
+                    success: true,
+                    data: {
+                        title: info.title || 'Facebook Video',
+                        url: bestFormat.url,
+                        thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
+                        sizes: ['Original Quality'],
+                        source: 'facebook',
+                    }
+                };
+            }
+        }
+
+        const tempId = Date.now();
+        const tempFilePath = path.join(TEMP_DIR, `facebook-${tempId}.mp4`);
+
+        await youtubeDl(url, {
+            output: tempFilePath,
+            format: 'best[ext=mp4]/best',
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.facebook.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
+            const videoUrl = `/api/stream-file?path=${encodeURIComponent(tempFilePath)}`;
+
+            return {
+                success: true,
+                data: {
+                    title: 'Facebook Video',
+                    url: videoUrl,
+                    localFilePath: tempFilePath,
+                    thumbnail: 'https://via.placeholder.com/300x150',
+                    sizes: ['Original Quality'],
+                    source: 'facebook',
+                }
+            };
+        }
+
+        throw new Error('No Facebook video found');
+    } catch (error) {
+        console.error('Facebook enhanced processing failed:', error);
+        throw error;
+    }
+}
+
+async function processYouTubeWithYtdl(url) {
+    console.log(`Processing YouTube URL with enhanced method: ${url}`);
+
+    try {
+        const info = await youtubeDl(url, {
+            dumpSingleJson: true,
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.youtube.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (info && info.formats && info.formats.length > 0) {
+            const videoFormats = info.formats
+                .filter(f => f.vcodec !== 'none' && f.acodec !== 'none')
+                .sort((a, b) => (b.height || 0) - (a.height || 0));
+
+            if (videoFormats.length > 0) {
+                const bestFormat = videoFormats[0];
+                return {
+                    success: true,
+                    data: {
+                        title: info.title || 'YouTube Video',
+                        url: bestFormat.url,
+                        thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
+                        sizes: [bestFormat.height ? `${bestFormat.height}p` : 'Original Quality'],
+                        source: 'youtube',
+                    }
+                };
+            }
+        }
+
+        const tempId = Date.now();
+        const tempFilePath = path.join(TEMP_DIR, `youtube-${tempId}.mp4`);
+
+        await youtubeDl(url, {
+            output: tempFilePath,
+            format: 'best[ext=mp4]/best',
+            noCheckCertificates: true,
+            noWarnings: true,
+            addHeader: [
+                'referer:https://www.youtube.com/',
+                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ],
+        });
+
+        if (fs.existsSync(tempFilePath) && fs.statSync(tempFilePath).size > 1000) {
+            const videoUrl = `/api/stream-file?path=${encodeURIComponent(tempFilePath)}`;
+
+            return {
+                success: true,
+                data: {
+                    title: 'YouTube Video',
+                    url: videoUrl,
+                    localFilePath: tempFilePath,
+                    thumbnail: 'https://via.placeholder.com/300x150',
+                    sizes: ['Original Quality'],
+                    source: 'youtube',
+                }
+            };
+        }
+
+        throw new Error('No YouTube video found');
+    } catch (error) {
+        console.error('YouTube enhanced processing failed:', error);
+        throw error;
+    }
+}
