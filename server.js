@@ -125,7 +125,7 @@ const formatData = async (platform, data) => {
             console.info("Data Formatting: Instagram data formatted successfully.");
             return {
                 title: data[0]?.wm || 'Untitled Media',
-                url: data[0]?.url,
+                url: data[0]?.url, // Keep direct URL - don't shorten
                 thumbnail: data[0]?.thumbnail || placeholderThumbnail,
                 sizes: ['Original Quality'],
                 source: platform,
@@ -3637,29 +3637,64 @@ async function processInstagramWithYtdl(url) {
     console.log(`Processing Instagram URL with enhanced method: ${url}`);
 
     try {
-        const info = await youtubeDl(url, {
-            dumpSingleJson: true,
-            noCheckCertificates: true,
-            noWarnings: true,
-            addHeader: [
-                'referer:https://www.instagram.com/',
-                'user-agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            ],
+        // Try direct page scraping first
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            }
         });
 
-        if (info && info.url) {
-            return {
-                success: true,
-                data: {
-                    title: info.title || 'Instagram Media',
-                    url: info.url,
-                    thumbnail: info.thumbnail || 'https://via.placeholder.com/300x150',
-                    sizes: ['Original Quality'],
-                    source: 'instagram',
+        if (response.ok) {
+            const html = await response.text();
+
+            // Look for direct video URLs in Instagram page
+            const videoPatterns = [
+                /"video_url":"([^"]+)"/,
+                /"playbackUrl":"([^"]+)"/,
+                /https:\/\/[^"]+\.cdninstagram\.com\/[^"]+\.mp4[^"]*/g
+            ];
+
+            for (const pattern of videoPatterns) {
+                if (pattern.global) {
+                    const matches = html.match(pattern);
+                    if (matches && matches.length > 0) {
+                        const videoUrl = matches[0].replace(/"/g, '').replace(/&amp;/g, '&');
+                        return {
+                            success: true,
+                            data: {
+                                title: 'Instagram Media',
+                                url: videoUrl, // Direct URL
+                                thumbnail: 'https://via.placeholder.com/300x150',
+                                sizes: ['Original Quality'],
+                                source: 'instagram',
+                            }
+                        };
+                    }
+                } else {
+                    const match = pattern.exec(html);
+                    if (match && match[1]) {
+                        const videoUrl = match[1]
+                            .replace(/\\u002F/g, '/')
+                            .replace(/\\\//g, '/')
+                            .replace(/\\/g, '')
+                            .replace(/&amp;/g, '&');
+                        return {
+                            success: true,
+                            data: {
+                                title: 'Instagram Media',
+                                url: videoUrl, // Direct URL
+                                thumbnail: 'https://via.placeholder.com/300x150',
+                                sizes: ['Original Quality'],
+                                source: 'instagram',
+                            }
+                        };
+                    }
                 }
-            };
+            }
         }
 
+        // Fallback to file download method
         const tempId = Date.now();
         const tempFilePath = path.join(TEMP_DIR, `instagram-${tempId}.mp4`);
 
@@ -3681,7 +3716,7 @@ async function processInstagramWithYtdl(url) {
                 success: true,
                 data: {
                     title: 'Instagram Media',
-                    url: videoUrl,
+                    url: videoUrl, // Local streaming URL
                     localFilePath: tempFilePath,
                     thumbnail: 'https://via.placeholder.com/300x150',
                     sizes: ['Original Quality'],
@@ -3696,7 +3731,6 @@ async function processInstagramWithYtdl(url) {
         throw error;
     }
 }
-
 async function processFacebookWithYtdl(url) {
     console.log(`Processing Facebook URL with enhanced method: ${url}`);
 

@@ -32,16 +32,15 @@ async function fetchYouTubeData(url) {
     }
 
     return {
-      title: data.title,
-      thumbnail: data.cover,
-      duration: data.duration,
-      // Normalize shapes
-      formats: data.items.map((item) => ({
-        type: item.type,                  // 'video' | 'audio' | 'video-only' | 'audio-only'
-        quality: item.label || item.quality || "unknown",
-        ext: item.ext || item.extension || "mp4",
-        url: item.url,
-      })),
+        success: true,
+        data: {
+            title: data.title,
+            url: bestUrl, // Direct URL instead of proxy
+            thumbnail: data.thumbnail || 'https://via.placeholder.com/300x150',
+            quality: selectedFormat.quality || 'Best Available',
+            duration: data.duration,
+            source: 'youtube'
+        }
     };
   } catch (err) {
     throw new Error(`YouTube downloader request failed: ${err.message}`);

@@ -69,16 +69,15 @@ async function downloadFacebookVideo(url) {
     }));
 
     return {
-      success: true,
-      data: {
-        title,
-        url: makeProxy(first.url, title),
-        thumbnail,
-        quality: first.resolution || 'Best Available',
-        duration,
-        source: 'facebook',
-        formats
-      }
+        success: true,
+        data: {
+            title,
+            url: first.url, // Direct URL instead of proxy
+            thumbnail,
+            quality: first.resolution || 'Best Available',
+            duration,
+            source: 'facebook'
+        }
     };
   } catch (error) {
     console.error('Facebook controller failed:', error.message);
