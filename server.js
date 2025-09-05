@@ -1305,10 +1305,9 @@ switch (platform) {
 
         const formattedData = await formatData(platform, data);
 
-       if (platform !== 'threads' && platform !== 'instagram' && platform !== 'facebook' && platform !== 'youtube') {
-           formattedData.url = await shortenUrl(formattedData.url);
-           formattedData.thumbnail = await shortenUrl(formattedData.thumbnail);
-       }
+        // Use original URLs without shortening to avoid redirect issues
+        console.log('Using original URLs without shortening to avoid redirect issues');
+        console.log('Final video URL:', formattedData.url.substring(0, 100) + '...');
 
         console.info("Download Media: Media successfully downloaded and formatted.");
 
