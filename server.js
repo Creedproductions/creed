@@ -108,9 +108,18 @@ const formatData = async (platform, data) => {
                 throw new Error("Data Formatting: YouTube data is incomplete or improperly formatted.");
             }
             console.info("Data Formatting: YouTube data formatted successfully.");
+
+            let finalUrl = youtubeData.low || youtubeData.high || '';
+
+            // Route through direct handler for better download reliability
+            if (finalUrl && (finalUrl.includes('googlevideo.com') || finalUrl.includes('youtube.com'))) {
+                console.log('YouTube: Routing through direct download handler for better reliability');
+                finalUrl = `/api/direct?url=${encodeURIComponent(finalUrl)}&filename=youtube-video.mp4`;
+            }
+
             return {
                 title: youtubeData.title || 'Untitled Video',
-                url: youtubeData.low || youtubeData.high || '',
+                url: finalUrl,
                 thumbnail: youtubeData.thumbnail || placeholderThumbnail,
                 sizes: ['Low Quality', 'High Quality'],
                 source: platform,
@@ -123,15 +132,75 @@ const formatData = async (platform, data) => {
                 throw new Error("Instagram data is missing or invalid.");
             }
             console.info("Data Formatting: Instagram data formatted successfully.");
+
+            let finalUrl = data[0]?.url;
+
+            // Route token URLs and CDN URLs through direct handler
+            if (finalUrl && (finalUrl.includes('rapidcdn.app') || finalUrl.includes('cdninstagram.com') || finalUrl.includes('scontent'))) {
+                console.log('Instagram: Routing through direct download handler');
+                finalUrl = `/api/direct?url=${encodeURIComponent(finalUrl)}&filename=instagram-video.mp4`;
+            }
+
             return {
                 title: data[0]?.wm || 'Untitled Media',
-                url: data[0]?.url, // Keep direct URL - don't shorten
+                url: finalUrl,
                 thumbnail: data[0]?.thumbnail || placeholderThumbnail,
                 sizes: ['Original Quality'],
                 source: platform,
             };
         }
 
+        case 'facebook': {
+            console.log("Processing Facebook data...");
+
+            // Handle new enhanced structure first
+            if (data.success && data.data) {
+                let finalUrl = data.data.url || '';
+
+                // Route Facebook CDN URLs through direct handler
+                if (finalUrl && (finalUrl.includes('fbcdn.net') || finalUrl.includes('facebook.com') || finalUrl.includes('scontent'))) {
+                    console.log('Facebook: Routing through direct download handler');
+                    finalUrl = `/api/direct?url=${encodeURIComponent(finalUrl)}&filename=facebook-video.mp4`;
+                }
+
+                return {
+                    title: data.data.title || 'Facebook Video',
+                    url: finalUrl,
+                    thumbnail: data.data.thumbnail || placeholderThumbnail,
+                    sizes: [data.data.quality || 'Original Quality'],
+                    source: platform,
+                };
+            }
+
+            // Handle other Facebook response formats
+            let fbUrl = '';
+
+            if (data.result?.links?.HD || data.result?.links?.SD) {
+                fbUrl = data.result.links.HD || data.result.links.SD || '';
+            } else if (data.hd || data.sd) {
+                fbUrl = data.hd || data.sd || '';
+            } else if (Array.isArray(data) && data.length > 0 && data[0].url) {
+                fbUrl = data[0].url || '';
+            } else if (data.urls && Array.isArray(data.urls) && data.urls.length > 0) {
+                fbUrl = data.urls[0].url || '';
+            } else {
+                fbUrl = data.url || data.download_url || data.videoUrl || '';
+            }
+
+            // Route Facebook URLs through direct handler
+            if (fbUrl && (fbUrl.includes('fbcdn.net') || fbUrl.includes('facebook.com') || fbUrl.includes('scontent'))) {
+                console.log('Facebook: Routing through direct download handler');
+                fbUrl = `/api/direct?url=${encodeURIComponent(fbUrl)}&filename=facebook-video.mp4`;
+            }
+
+            return {
+                title: data.title || 'Facebook Video',
+                url: fbUrl,
+                thumbnail: data.thumbnail || data.image || placeholderThumbnail,
+                sizes: ['Original Quality'],
+                source: platform,
+            };
+        }
         case 'twitter': {
             const twitterData = data?.data;
             const videoUrl = twitterData?.high || twitterData?.low || '';
@@ -145,71 +214,6 @@ const formatData = async (platform, data) => {
             };
         }
 
-        case 'facebook': {
-            console.log("Formatting Facebook data...");
-
-            if (data.success && data.data) {
-                return {
-                    title: data.data.title || 'Facebook Video',
-                    url: data.data.url || '',
-                    thumbnail: data.data.thumbnail || placeholderThumbnail,
-                    sizes: [data.data.quality || 'Original Quality'],
-                    source: platform,
-                };
-            }
-
-            if (data.result?.links?.HD || data.result?.links?.SD) {
-                return {
-                    title: data.title || 'Untitled Video',
-                    url: data.result.links.HD || data.result.links.SD || '',
-                    thumbnail: data.result.thumbnail || placeholderThumbnail,
-                    sizes: ['Original Quality'],
-                    source: platform,
-                };
-            }
-
-            // Structure for @xaviabot/fb-downloader
-            if (data.hd || data.sd) {
-                return {
-                    title: data.title || 'Untitled Video',
-                    url: data.hd || data.sd || '',
-                    thumbnail: data.thumbnail || placeholderThumbnail,
-                    sizes: ['Original Quality'],
-                    source: platform,
-                };
-            }
-
-            // Structure for fb-downloader (array)
-            if (Array.isArray(data) && data.length > 0 && data[0].url) {
-                return {
-                    title: 'Facebook Video',
-                    url: data[0].url || '',
-                    thumbnail: data[0].thumbnail || placeholderThumbnail,
-                    sizes: data[0].isHD ? ['HD Quality'] : ['Standard Quality'],
-                    source: platform,
-                };
-            }
-
-            // Structure for fb-downloader (object with urls array)
-            if (data.urls && Array.isArray(data.urls) && data.urls.length > 0) {
-                return {
-                    title: data.title || 'Facebook Video',
-                    url: data.urls[0].url || '',
-                    thumbnail: data.thumbnail || placeholderThumbnail,
-                    sizes: data.urls[0].isHD ? ['HD Quality'] : ['Standard Quality'],
-                    source: platform,
-                };
-            }
-
-            // Generic fallback for any other structure
-            return {
-                title: data.title || 'Facebook Video',
-                url: data.url || data.download_url || data.videoUrl || '',
-                thumbnail: data.thumbnail || data.image || placeholderThumbnail,
-                sizes: ['Original Quality'],
-                source: platform,
-            };
-        }
         case 'pinterest': {
             console.info("Data Formatting: Pinterest is handled by dedicated endpoint.");
             return {
@@ -2421,8 +2425,170 @@ app.get('/api/audio-platform', async (req, res) => {
 });
 // Enhanced direct download with better headers and validation - ADD THIS BEFORE YOUR EXISTING ONE
 app.get('/api/direct', async (req, res) => {
-    let { url, filename } = req.query; // Changed from const to let
+    let { url, filename } = req.query;
 
+    if (!url) {
+        return res.status(400).json({ error: 'URL is required' });
+    }
+
+    // Special handling for token-based and CDN URLs
+
+    // Instagram RapidCDN URLs
+    if (url.includes('rapidcdn.app') && url.includes('token=')) {
+        console.log('Detected Instagram rapidcdn token URL, applying special handling');
+
+        const headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.instagram.com/',
+            'Origin': 'https://www.instagram.com',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'cross-site',
+            'Range': 'bytes=0-'
+        };
+
+        try {
+            const response = await fetch(url, {
+                headers,
+                redirect: 'follow'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Instagram CDN request failed: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type') || 'video/mp4';
+            const contentLength = response.headers.get('content-length');
+
+            console.log(`Instagram CDN response - Type: ${contentType}, Size: ${contentLength || 'unknown'}`);
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename || 'instagram-video.mp4'}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
+
+            response.body.pipe(res);
+            return;
+
+        } catch (error) {
+            console.error('Instagram CDN download error:', error);
+            return res.status(500).json({
+                error: 'Failed to download from Instagram CDN',
+                details: error.message
+            });
+        }
+    }
+
+    // YouTube googlevideo.com URLs
+    if (url.includes('googlevideo.com') || url.includes('youtube.com')) {
+        console.log('Detected YouTube URL, applying enhanced handling');
+
+        const ytHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://www.youtube.com/',
+            'Origin': 'https://www.youtube.com',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'cross-site',
+            'Range': 'bytes=0-'
+        };
+
+        try {
+            const response = await fetch(url, {
+                headers: ytHeaders,
+                redirect: 'follow',
+            });
+
+            if (!response.ok) {
+                throw new Error(`YouTube download failed: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type') || 'video/mp4';
+            const contentLength = response.headers.get('content-length');
+
+            console.log(`YouTube response - Type: ${contentType}, Size: ${contentLength || 'unknown'}`);
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename || 'youtube-video.mp4'}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
+
+            response.body.pipe(res);
+            return;
+
+        } catch (error) {
+            console.error('YouTube download error:', error);
+            return res.status(500).json({
+                error: 'YouTube download failed',
+                details: error.message
+            });
+        }
+    }
+
+    // Facebook CDN URLs
+    if (url.includes('facebook.com') || url.includes('fb.watch') || url.includes('fbcdn.net') ||
+        url.includes('video.xx.fbcdn.net') || url.includes('scontent')) {
+
+        console.log('Detected Facebook URL, applying enhanced handling');
+
+        const fbHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Range': 'bytes=0-',
+            'Referer': 'https://www.facebook.com/',
+            'Origin': 'https://www.facebook.com',
+            'Sec-Fetch-Dest': 'video',
+            'Sec-Fetch-Mode': 'cors',
+            'Sec-Fetch-Site': 'cross-site',
+            'Connection': 'keep-alive'
+        };
+
+        try {
+            const response = await fetch(url, {
+                headers: fbHeaders,
+                redirect: 'follow',
+            });
+
+            if (!response.ok) {
+                throw new Error(`Facebook download failed: ${response.status}`);
+            }
+
+            const contentType = response.headers.get('content-type') || 'video/mp4';
+            const contentLength = response.headers.get('content-length');
+
+            console.log(`Facebook response - Type: ${contentType}, Size: ${contentLength || 'unknown'}`);
+
+            // Validate content size for Facebook
+            const contentLengthNum = parseInt(contentLength || '0');
+            if (contentLengthNum > 0 && contentLengthNum < 1000) {
+                console.warn(`Warning: Facebook content is very small (${contentLengthNum} bytes), might be an error`);
+            }
+
+            res.setHeader('Content-Type', contentType);
+            res.setHeader('Content-Disposition', `attachment; filename="${filename || 'facebook-video.mp4'}"`);
+            if (contentLength) {
+                res.setHeader('Content-Length', contentLength);
+            }
+
+            response.body.pipe(res);
+            return;
+
+        } catch (error) {
+            console.error('Facebook download error:', error);
+            return res.status(500).json({
+                error: 'Facebook download failed',
+                details: error.message
+            });
+        }
+    }
     // Special handling for Pinterest videos
     if (url.includes('v.pinimg.com') || (url.includes('pinimg.com') && url.includes('.mp4'))) {
         console.log('Pinterest video URL detected, applying special handling');
